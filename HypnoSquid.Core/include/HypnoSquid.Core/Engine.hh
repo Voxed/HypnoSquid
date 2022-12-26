@@ -54,6 +54,7 @@ class Engine {
 
   u_int64_t invocation_id = 0;
   std::vector<std::pair<SystemType, std::function<void()>>> systems;
+  std::vector<std::function<void()>> startup_systems;
   std::vector<CommandBuffer> command_queue;
   EntityFactory entity_factory;
 
@@ -253,6 +254,12 @@ class Engine {
   }
 
   void invoke_systems() {
+    if (invocation_id == 0) {
+      for (auto &system : startup_systems) {
+        invocation_id++;
+        system();
+      }
+    }
     for (auto &system : systems) {
       invocation_id++;
       switch (system.first) {
@@ -301,32 +308,52 @@ public:
   }
 
   template <class... Parameters>
-  void add_system(std::function<void(Parameters...)> system) {
+  Engine &add_system(std::function<void(Parameters...)> system) {
     systems.push_back(std::make_pair(
         CONCURRENT, bind_system(std::function<void(Parameters...)>(
                         [system](Parameters... params) -> void {
                           system(std::forward<Parameters>(params)...);
                         }))));
+    return *this;
   }
 
   template <class... Parameters>
-  void add_system(void (*system)(Parameters...)) {
+  Engine &add_system(void (*system)(Parameters...)) {
     add_system(std::function<std::remove_pointer_t<decltype(system)>>(system));
+    return *this;
   }
 
   template <class... Parameters>
-  void add_synchronised_system(std::function<void(Parameters...)> system) {
+  Engine &add_synchronised_system(std::function<void(Parameters...)> system) {
     systems.push_back(std::make_pair(
         SYNCHRONISED, bind_system(std::function<void(Parameters...)>(
                           [system](Parameters... params) -> void {
                             system(std::forward<Parameters>(params)...);
                           }))));
+    return *this;
   }
 
   template <class... Parameters>
-  void add_synchronised_system(void (*system)(Parameters...)) {
+  Engine &add_synchronised_system(void (*system)(Parameters...)) {
     add_synchronised_system(
         std::function<std::remove_pointer_t<decltype(system)>>(system));
+    return *this;
+  }
+
+  template <class... Parameters>
+  Engine &add_startup_system(std::function<void(Parameters...)> system) {
+    startup_systems.push_back(bind_system(std::function<void(Parameters...)>(
+        [system](Parameters... params) -> void {
+          system(std::forward<Parameters>(params)...);
+        })));
+    return *this;
+  }
+
+  template <class... Parameters>
+  Engine &add_startup_system(void (*system)(Parameters...)) {
+    add_startup_system(
+        std::function<std::remove_pointer_t<decltype(system)>>(system));
+    return *this;
   }
 
   void run() {

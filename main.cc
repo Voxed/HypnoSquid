@@ -40,14 +40,14 @@ void test2(Query<TestData, Entity, const TestData2> &query,
       v.get_mut()->a;
     auto &v2 = get<2>(t);
 
-    std::cout << v->a << ":" << get<1>(t) << std::endl;
+    // std::cout << v->a << ":" << get<1>(t) << std::endl;
   }
 }
 
 void test3(Query<All<Changed<TestData>, Not<TestData3>>, TestData> q) {
   for (auto t : q.entities) {
     auto c = get<0>(t);
-    std::cout << "CHANGED!" << std::endl;
+    // std::cout << "CHANGED!" << std::endl;
   }
 }
 
@@ -58,13 +58,13 @@ void sleep_system(EntityFactory &ef) {
 
 int main() {
   hs::core::Engine engine;
-  engine.add_system(test);
-  engine.add_system(test2);
-  engine.add_system(test3);
-  // Synchronised systems will wait for all previous systems in the pipeline
-  // before starting. And block.
-  engine.add_synchronised_system(sleep_system);
-  engine.run();
+  engine.add_system(test)
+      .add_system(test2)
+      .add_system(test3)
+      // Synchronised systems will wait for all previous systems in the pipeline
+      // before starting. And block.
+      .add_synchronised_system(sleep_system)
+      .run();
 
   return 0;
 }
