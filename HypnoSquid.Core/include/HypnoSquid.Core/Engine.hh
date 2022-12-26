@@ -42,6 +42,8 @@ public:
   }
 };
 
+enum SystemType { CONCURRENT, SYNCHRONISED };
+
 class Engine {
   std::unordered_map<
       std::type_index,
@@ -51,7 +53,7 @@ class Engine {
       data;
 
   u_int64_t invocation_id = 0;
-  std::vector<std::function<void()>> systems;
+  std::vector<std::pair<SystemType, std::function<void()>>> systems;
   std::vector<CommandBuffer> command_queue;
   EntityFactory entity_factory;
 
@@ -247,12 +249,20 @@ class Engine {
         }
       }
     }
+    command_queue.clear();
   }
 
   void invoke_systems() {
     for (auto &system : systems) {
       invocation_id++;
-      system();
+      switch (system.first) {
+      case SYNCHRONISED:
+        system.second();
+        break;
+      case CONCURRENT:
+        system.second();
+        break;
+      }
     }
   }
 
@@ -292,10 +302,11 @@ public:
 
   template <class... Parameters>
   void add_system(std::function<void(Parameters...)> system) {
-    systems.push_back(bind_system(std::function<void(Parameters...)>(
-        [system](Parameters... params) -> void {
-          system(std::forward<Parameters>(params)...);
-        })));
+    systems.push_back(std::make_pair(
+        CONCURRENT, bind_system(std::function<void(Parameters...)>(
+                        [system](Parameters... params) -> void {
+                          system(std::forward<Parameters>(params)...);
+                        }))));
   }
 
   template <class... Parameters>
@@ -303,11 +314,26 @@ public:
     add_system(std::function<std::remove_pointer_t<decltype(system)>>(system));
   }
 
-  void test() {
-    invoke_systems();
-    process_commands();
-    invoke_systems();
-    invoke_systems();
+  template <class... Parameters>
+  void add_synchronised_system(std::function<void(Parameters...)> system) {
+    systems.push_back(std::make_pair(
+        SYNCHRONISED, bind_system(std::function<void(Parameters...)>(
+                          [system](Parameters... params) -> void {
+                            system(std::forward<Parameters>(params)...);
+                          }))));
+  }
+
+  template <class... Parameters>
+  void add_synchronised_system(void (*system)(Parameters...)) {
+    add_synchronised_system(
+        std::function<std::remove_pointer_t<decltype(system)>>(system));
+  }
+
+  void run() {
+    while (true) {
+      invoke_systems();
+      process_commands();
+    }
   }
 };
 

@@ -1,5 +1,6 @@
 #include <functional>
 #include <iostream>
+#include <thread>
 
 #include "HypnoSquid.Core/Engine.hh"
 
@@ -50,12 +51,20 @@ void test3(Query<All<Changed<TestData>, Not<TestData3>>, TestData> q) {
   }
 }
 
+// Temporary system to stop engine from flying away.
+void sleep_system(EntityFactory &ef) {
+  std::this_thread::sleep_for(std::chrono::milliseconds(16));
+}
+
 int main() {
   hs::core::Engine engine;
   engine.add_system(test);
   engine.add_system(test2);
   engine.add_system(test3);
-  engine.test();
+  // Synchronised systems will wait for all previous systems in the pipeline
+  // before starting. And block.
+  engine.add_synchronised_system(sleep_system);
+  engine.run();
 
   return 0;
 }
