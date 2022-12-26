@@ -37,10 +37,10 @@ template <class... Components> struct Query {
       TypeIterator<0, typename QueryTypeWrapper<Components>::processed...>;
   std::vector<std::tuple<typename QueryTypeWrapper<Components>::processed...>>
       entities;
-  using filter = Filter<>;
+  using filter = filters::Nop;
 };
 
-template <concepts::FilterConcept Filter, class... Components>
+template <concepts::Filter Filter, class... Components>
 struct Query<Filter, Components...> {
   static constexpr bool is_query = true;
   using component_type_iterator =

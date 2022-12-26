@@ -17,6 +17,7 @@
 #include <typeindex>
 #include <typeinfo>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace hs {
@@ -78,36 +79,85 @@ class Engine {
   }
 
   template <class FilterIterator>
-  std::vector<Entity> apply_filters(std::vector<Entity> entities,
-                                    u_int64_t last_invocation_id) {
+  std::unordered_set<Entity>
+  apply_all_filters(std::unordered_set<Entity> entities,
+                    u_int64_t last_invocation_id) {
     if constexpr (FilterIterator::empty) {
       return entities;
     } else {
-      std::vector<Entity> filtered;
+      std::unordered_set<Entity> filtered;
+      using Filter = typename FilterIterator::type;
       for (Entity e : entities) {
-        if constexpr (ChangedConcept<typename FilterIterator::type>) {
-          if (data.at(typeid(typename FilterIterator::type::component_type))
+        if constexpr (concepts::Changed<typename FilterIterator::type>) {
+          if (data.at(typeid(typename Filter::component_type))
                   .at(e)
                   .first.has_changed(last_invocation_id))
-            filtered.push_back(e);
+            filtered.insert(e);
+        } else if constexpr (concepts::Not<typename FilterIterator::type>) {
+          if (!data.at(typeid(typename Filter::component_type)).contains(e))
+            filtered.insert(e);
         }
       }
-      return apply_filters<typename FilterIterator::next>(filtered,
-                                                          last_invocation_id);
+      return apply_all_filters<typename FilterIterator::next>(
+          filtered, last_invocation_id);
     }
   }
 
-  std::vector<u_int32_t>
+  template <class FilterIterator>
+  std::unordered_set<Entity>
+  apply_any_filters(std::unordered_set<Entity> filtered,
+                    std::unordered_set<Entity> entities,
+                    u_int64_t last_invocation_id) {
+    if constexpr (FilterIterator::empty) {
+      return filtered;
+    } else {
+      using Filter = typename FilterIterator::type;
+      for (auto e : apply_filter<Filter>(entities, last_invocation_id))
+        filtered.insert(e);
+      return apply_any_filters<typename FilterIterator::next>(
+          filtered, entities, last_invocation_id);
+    }
+  }
+
+  template <class Filter>
+  std::unordered_set<Entity> apply_filter(std::unordered_set<Entity> entities,
+                                          u_int64_t last_invocation_id) {
+
+    std::unordered_set<Entity> filtered;
+    if constexpr (concepts::Changed<Filter>) {
+      for (Entity e : entities)
+        if (data.at(typeid(typename Filter::component_type))
+                .at(e)
+                .first.has_changed(last_invocation_id))
+          filtered.insert(e);
+    } else if constexpr (concepts::Not<Filter>) {
+      for (Entity e : entities)
+        if (!data.at(typeid(typename Filter::component_type)).contains(e))
+          filtered.insert(e);
+    } else if constexpr (concepts::All<Filter>) {
+      filtered = apply_all_filters<typename Filter::iterator>(
+          entities, last_invocation_id);
+    } else if constexpr (concepts::Any<Filter>) {
+      filtered = apply_any_filters<typename Filter::iterator>(
+          {}, entities, last_invocation_id);
+    } else if constexpr (concepts::Nop<Filter>) {
+      filtered = entities;
+    }
+
+    return filtered;
+  }
+
+  std::unordered_set<u_int32_t>
   intersect_stores(std::vector<std::type_index> to_intersect) {
-    std::vector<u_int32_t> entities;
+    std::unordered_set<u_int32_t> entities;
     if (to_intersect.empty()) {
       return entities;
     }
     for (auto &p : data[to_intersect.back()]) {
-      entities.push_back(p.first);
+      entities.insert(p.first);
     }
     to_intersect.pop_back();
-    std::vector<u_int32_t> intersected;
+    std::unordered_set<u_int32_t> intersected;
     for (auto e : entities) {
       bool bad = false;
       for (auto &i : to_intersect) {
@@ -117,7 +167,7 @@ class Engine {
         }
       }
       if (!bad) {
-        intersected.push_back(e);
+        intersected.insert(e);
       }
     }
     return intersected;
@@ -129,9 +179,8 @@ class Engine {
     std::vector<std::type_index> stores =
         Iterator::template get_type_indices<u_int32_t>();
     std::vector<Tuple> components;
-    std::vector<u_int32_t> entities = intersect_stores(stores);
-    entities =
-        apply_filters<typename T::filter::iterator>(entities, last_invocation);
+    std::unordered_set<u_int32_t> entities = intersect_stores(stores);
+    entities = apply_filter<typename T::filter>(entities, last_invocation);
     for (u_int32_t e : entities) {
       components.push_back(query_tuple<Tuple, Iterator>(e, last_invocation));
     }
