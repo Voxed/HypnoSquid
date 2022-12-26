@@ -280,11 +280,12 @@ public:
       std::cout << "Found engine configuration!" << std::endl;
       std::ifstream engine_config_file("hypnosquid.json");
       nlohmann::json engine_config = nlohmann::json::parse(engine_config_file);
-      std::cout << engine_config << std::endl;
-      auto plugin_paths =
-          engine_config["plugins"].get<std::vector<std::string>>();
-      for (const auto &path : plugin_paths) {
-        load_plugin(path);
+      if (engine_config.contains("plugins")) {
+        auto plugin_paths =
+            engine_config["plugins"].get<std::vector<std::string>>();
+        for (const auto &path : plugin_paths) {
+          load_plugin(path);
+        }
       }
     }
   }
