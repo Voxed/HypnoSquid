@@ -1,7 +1,7 @@
 #include <functional>
 #include <iostream>
 
-#include "Engine.hh"
+#include "HypnoSquid.Core/Engine.hh"
 
 using namespace hs::core;
 using namespace ::filters;

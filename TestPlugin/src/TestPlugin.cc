@@ -1,5 +1,5 @@
 #include "../include/TestPlugin.hh"
-#include "Engine.hh"
+#include "HypnoSquid.Core/Engine.hh"
 
 void test(hs::core::EntityFactory &ef) {
   std::cout << "Plugin hooked!" << std::endl;
