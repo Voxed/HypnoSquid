@@ -10,16 +10,18 @@
 #include "Filter.hh"
 #include "Query.hh"
 
+#include <dlfcn.h>
+#include <fstream>
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <nlohmann/json.hpp>
 #include <tuple>
 #include <typeindex>
 #include <typeinfo>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-
 namespace hs {
 namespace core {
 
@@ -55,26 +57,24 @@ class Engine {
 
   template <class Tuple, class Iterator, class... Values>
   Tuple query_tuple(u_int32_t entity, u_int64_t last_invocation_id,
-                    Values... vals) {
+                    Values... values) {
     if constexpr (!Iterator::empty) {
-      if constexpr (std::is_same_v<u_int32_t, typename Iterator::type>) {
+      using Type = typename Iterator::type;
+      using Next = typename Iterator::next;
+      if constexpr (std::is_same_v<u_int32_t, Type>) {
         auto value = entity;
-        return query_tuple<Tuple, typename Iterator::next>(
-            entity, last_invocation_id, vals..., value);
-      } else if constexpr (requires {
-                             Iterator::type::is_component_reference;
-                           }) {
-        auto &component =
-            data[typeid(typename Iterator::type::value_type)].at(entity);
-        auto value = typename Iterator::type(
-            static_cast<typename Iterator::type::value_type *>(
-                component.second.get()),
-            component.first, invocation_id, last_invocation_id);
-        return query_tuple<Tuple, typename Iterator::next>(
-            entity, last_invocation_id, vals..., value);
+        return query_tuple<Tuple, Next>(entity, last_invocation_id, values...,
+                                        value);
+      } else if constexpr (concepts::ComponentReference<Type>) {
+        using ComponentType = typename Type::value_type;
+        auto &component = data[typeid(ComponentType)].at(entity);
+        auto value = Type(static_cast<ComponentType *>(component.second.get()),
+                          component.first, invocation_id, last_invocation_id);
+        return query_tuple<Tuple, Next>(entity, last_invocation_id, values...,
+                                        value);
       }
     } else {
-      return std::make_tuple(vals...);
+      return std::make_tuple(values...);
     }
   }
 
@@ -88,12 +88,12 @@ class Engine {
       std::unordered_set<Entity> filtered;
       using Filter = typename FilterIterator::type;
       for (Entity e : entities) {
-        if constexpr (concepts::Changed<typename FilterIterator::type>) {
+        if constexpr (concepts::Changed<Filter>) {
           if (data.at(typeid(typename Filter::component_type))
                   .at(e)
                   .first.has_changed(last_invocation_id))
             filtered.insert(e);
-        } else if constexpr (concepts::Not<typename FilterIterator::type>) {
+        } else if constexpr (concepts::Not<Filter>) {
           if (!data.at(typeid(typename Filter::component_type)).contains(e))
             filtered.insert(e);
         }
@@ -176,17 +176,16 @@ class Engine {
   template <class T> T create_query(u_int64_t last_invocation) {
     using Tuple = typename decltype(T::entities)::value_type;
     using Iterator = typename T::component_type_iterator;
+    using Filter = typename T::filter;
     std::vector<std::type_index> stores =
         Iterator::template get_type_indices<u_int32_t>();
     std::vector<Tuple> components;
     std::unordered_set<u_int32_t> entities = intersect_stores(stores);
-    entities = apply_filter<typename T::filter>(entities, last_invocation);
+    entities = apply_filter<Filter>(entities, last_invocation);
     for (u_int32_t e : entities) {
       components.push_back(query_tuple<Tuple, Iterator>(e, last_invocation));
     }
-    T query;
-    query.entities = std::move(components);
-    return query;
+    return T{.entities = std::move(components)};
   }
 
   template <class First, class... Parameters>
@@ -194,7 +193,6 @@ class Engine {
              concepts::QueryConcept<std::remove_reference_t<First>>
   std::function<void()>
   bind_system(std::function<void(First, Parameters...)> system) {
-
     std::function<void(Parameters...)> func = [this,
                                                system](Parameters... params) {
       if constexpr (std::is_same_v<Commands, First>) {
@@ -258,7 +256,39 @@ class Engine {
     }
   }
 
+  void load_plugin(const std::string &plugin_path) {
+    std::cout << "Loading plugin: " << plugin_path << std::endl;
+    void *plugin_handle = dlopen(plugin_path.c_str(), RTLD_LAZY);
+    if (plugin_handle == nullptr) {
+      std::cout << "Failed to load plugin " << plugin_path
+                << ", file not found." << std::endl;
+      exit(-1);
+    }
+    void (*init_plugin)(Engine &);
+    init_plugin = (decltype(init_plugin))dlsym(plugin_handle, "init_plugin");
+    if (init_plugin == nullptr) {
+      std::cout << "Failed to load plugin " << plugin_path
+                << ", no init function." << std::endl;
+      exit(-1);
+    }
+    init_plugin(*this);
+  }
+
 public:
+  Engine() {
+    if (std::filesystem::exists("hypnosquid.json")) {
+      std::cout << "Found engine configuration!" << std::endl;
+      std::ifstream engine_config_file("hypnosquid.json");
+      nlohmann::json engine_config = nlohmann::json::parse(engine_config_file);
+      std::cout << engine_config << std::endl;
+      auto plugin_paths =
+          engine_config["plugins"].get<std::vector<std::string>>();
+      for (const auto &path : plugin_paths) {
+        load_plugin(path);
+      }
+    }
+  }
+
   template <class... Parameters>
   void add_system(std::function<void(Parameters...)> system) {
     systems.push_back(bind_system(std::function<void(Parameters...)>(

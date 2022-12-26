@@ -4,6 +4,7 @@
 #include "Engine.hh"
 
 using namespace hs::core;
+using namespace ::filters;
 
 struct TestData {
   u_int32_t a;
@@ -42,10 +43,7 @@ void test2(Query<TestData, Entity, const TestData2> &query,
   }
 }
 
-void test3(
-    Query<filters::All<filters::Changed<TestData>, filters::Not<TestData3>>,
-          TestData>
-        q) {
+void test3(Query<All<Changed<TestData>, Not<TestData3>>, TestData> q) {
   for (auto t : q.entities) {
     auto c = get<0>(t);
     std::cout << "CHANGED!" << std::endl;
