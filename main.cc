@@ -18,12 +18,12 @@ struct TestData2 {
 struct TestData3 {};
 
 void test(Commands commands, EntityFactory &entity_factory) {
-  for (u_int32_t i = 0; i < 100; i++) {
+  for (u_int32_t i = 0; i < 2; i++) {
     u_int32_t e = entity_factory.create_entity();
     commands.add_component<TestData>(e, {.a = i});
-    if (i == 53 || i == 69) {
+    if (i == 0 || i == 1) {
       commands.add_component<TestData2>(e);
-      if (i == 53) {
+      if (i == 1) {
         commands.add_component<TestData3>(e);
       }
     } else {
@@ -61,8 +61,8 @@ int main() {
   engine.add_system(test)
       .add_system(test2)
       .add_system(test3)
-      // Synchronised systems will wait for all previous systems in the pipeline
-      // before starting. And block.
+      // Synchronised systems will run synchronised at the end of each
+      // update.
       .add_synchronised_system(sleep_system)
       .run();
 

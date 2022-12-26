@@ -42,8 +42,6 @@ public:
   }
 };
 
-enum SystemType { CONCURRENT, SYNCHRONISED };
-
 class Engine {
   std::unordered_map<
       std::type_index,
@@ -53,7 +51,8 @@ class Engine {
       data;
 
   u_int64_t invocation_id = 0;
-  std::vector<std::pair<SystemType, std::function<void()>>> systems;
+  std::vector<std::function<void()>> systems;
+  std::vector<std::function<void()>> synchronised_systems;
   std::vector<std::function<void()>> startup_systems;
   std::vector<CommandBuffer> command_queue;
   EntityFactory entity_factory;
@@ -262,14 +261,11 @@ class Engine {
     }
     for (auto &system : systems) {
       invocation_id++;
-      switch (system.first) {
-      case SYNCHRONISED:
-        system.second();
-        break;
-      case CONCURRENT:
-        system.second();
-        break;
-      }
+      system();
+    }
+    for (auto &system : synchronised_systems) {
+      invocation_id++;
+      system();
     }
   }
 
@@ -309,11 +305,10 @@ public:
 
   template <class... Parameters>
   Engine &add_system(std::function<void(Parameters...)> system) {
-    systems.push_back(std::make_pair(
-        CONCURRENT, bind_system(std::function<void(Parameters...)>(
-                        [system](Parameters... params) -> void {
-                          system(std::forward<Parameters>(params)...);
-                        }))));
+    systems.push_back(bind_system(std::function<void(Parameters...)>(
+        [system](Parameters... params) -> void {
+          system(std::forward<Parameters>(params)...);
+        })));
     return *this;
   }
 
@@ -325,11 +320,11 @@ public:
 
   template <class... Parameters>
   Engine &add_synchronised_system(std::function<void(Parameters...)> system) {
-    systems.push_back(std::make_pair(
-        SYNCHRONISED, bind_system(std::function<void(Parameters...)>(
-                          [system](Parameters... params) -> void {
-                            system(std::forward<Parameters>(params)...);
-                          }))));
+    synchronised_systems.push_back(
+        bind_system(std::function<void(Parameters...)>(
+            [system](Parameters... params) -> void {
+              system(std::forward<Parameters>(params)...);
+            })));
     return *this;
   }
 
