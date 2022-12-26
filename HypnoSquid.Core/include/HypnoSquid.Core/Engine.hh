@@ -43,6 +43,8 @@ public:
 };
 
 class Engine {
+  using System = std::pair<SystemState, std::function<void(SystemState)>>;
+
   std::unordered_map<
       std::type_index,
       std::unordered_map<
@@ -51,29 +53,27 @@ class Engine {
       data;
 
   u_int64_t invocation_id = 0;
-  std::vector<std::function<void()>> systems;
-  std::vector<std::function<void()>> synchronised_systems;
-  std::vector<std::function<void()>> startup_systems;
+  std::vector<System> systems;
+  std::vector<System> synchronised_systems;
+  std::vector<System> startup_systems;
   std::vector<CommandBuffer> command_queue;
   EntityFactory entity_factory;
 
   template <class Tuple, class Iterator, class... Values>
-  Tuple query_tuple(u_int32_t entity, u_int64_t last_invocation_id,
+  Tuple query_tuple(u_int32_t entity, SystemState system_state,
                     Values... values) {
     if constexpr (!Iterator::empty) {
       using Type = typename Iterator::type;
       using Next = typename Iterator::next;
       if constexpr (std::is_same_v<u_int32_t, Type>) {
         auto value = entity;
-        return query_tuple<Tuple, Next>(entity, last_invocation_id, values...,
-                                        value);
+        return query_tuple<Tuple, Next>(entity, system_state, values..., value);
       } else if constexpr (concepts::ComponentReference<Type>) {
         using ComponentType = typename Type::value_type;
         auto &component = data[typeid(ComponentType)].at(entity);
         auto value = Type(static_cast<ComponentType *>(component.second.get()),
-                          component.first, invocation_id, last_invocation_id);
-        return query_tuple<Tuple, Next>(entity, last_invocation_id, values...,
-                                        value);
+                          component.first, system_state);
+        return query_tuple<Tuple, Next>(entity, system_state, values..., value);
       }
     } else {
       return std::make_tuple(values...);
@@ -83,7 +83,7 @@ class Engine {
   template <class FilterIterator>
   std::unordered_set<Entity>
   apply_all_filters(std::unordered_set<Entity> entities,
-                    u_int64_t last_invocation_id) {
+                    SystemState system_state) {
     if constexpr (FilterIterator::empty) {
       return entities;
     } else {
@@ -93,15 +93,15 @@ class Engine {
         if constexpr (concepts::Changed<Filter>) {
           if (data.at(typeid(typename Filter::component_type))
                   .at(e)
-                  .first.has_changed(last_invocation_id))
+                  .first.has_changed(system_state))
             filtered.insert(e);
         } else if constexpr (concepts::Not<Filter>) {
           if (!data.at(typeid(typename Filter::component_type)).contains(e))
             filtered.insert(e);
         }
       }
-      return apply_all_filters<typename FilterIterator::next>(
-          filtered, last_invocation_id);
+      return apply_all_filters<typename FilterIterator::next>(filtered,
+                                                              system_state);
     }
   }
 
@@ -109,39 +109,39 @@ class Engine {
   std::unordered_set<Entity>
   apply_any_filters(std::unordered_set<Entity> filtered,
                     std::unordered_set<Entity> entities,
-                    u_int64_t last_invocation_id) {
+                    SystemState system_state) {
     if constexpr (FilterIterator::empty) {
       return filtered;
     } else {
       using Filter = typename FilterIterator::type;
-      for (auto e : apply_filter<Filter>(entities, last_invocation_id))
+      for (auto e : apply_filter<Filter>(entities, system_state))
         filtered.insert(e);
       return apply_any_filters<typename FilterIterator::next>(
-          filtered, entities, last_invocation_id);
+          filtered, entities, system_state);
     }
   }
 
   template <class Filter>
   std::unordered_set<Entity> apply_filter(std::unordered_set<Entity> entities,
-                                          u_int64_t last_invocation_id) {
+                                          SystemState system_state) {
 
     std::unordered_set<Entity> filtered;
     if constexpr (concepts::Changed<Filter>) {
       for (Entity e : entities)
         if (data.at(typeid(typename Filter::component_type))
                 .at(e)
-                .first.has_changed(last_invocation_id))
+                .first.has_changed(system_state))
           filtered.insert(e);
     } else if constexpr (concepts::Not<Filter>) {
       for (Entity e : entities)
         if (!data.at(typeid(typename Filter::component_type)).contains(e))
           filtered.insert(e);
     } else if constexpr (concepts::All<Filter>) {
-      filtered = apply_all_filters<typename Filter::iterator>(
-          entities, last_invocation_id);
+      filtered =
+          apply_all_filters<typename Filter::iterator>(entities, system_state);
     } else if constexpr (concepts::Any<Filter>) {
-      filtered = apply_any_filters<typename Filter::iterator>(
-          {}, entities, last_invocation_id);
+      filtered = apply_any_filters<typename Filter::iterator>({}, entities,
+                                                              system_state);
     } else if constexpr (concepts::Nop<Filter>) {
       filtered = entities;
     }
@@ -175,7 +175,7 @@ class Engine {
     return intersected;
   }
 
-  template <class T> T create_query(u_int64_t last_invocation) {
+  template <class T> T create_query(SystemState system_state) {
     using Tuple = typename decltype(T::entities)::value_type;
     using Iterator = typename T::component_type_iterator;
     using Filter = typename T::filter;
@@ -183,9 +183,9 @@ class Engine {
         Iterator::template get_type_indices<u_int32_t>();
     std::vector<Tuple> components;
     std::unordered_set<u_int32_t> entities = intersect_stores(stores);
-    entities = apply_filter<Filter>(entities, last_invocation);
+    entities = apply_filter<Filter>(entities, system_state);
     for (u_int32_t e : entities) {
-      components.push_back(query_tuple<Tuple, Iterator>(e, last_invocation));
+      components.push_back(query_tuple<Tuple, Iterator>(e, system_state));
     }
     return T{.entities = std::move(components)};
   }
@@ -193,24 +193,22 @@ class Engine {
   template <class First, class... Parameters>
     requires concepts::is_in<First, Commands, EntityFactory &> ||
              concepts::QueryConcept<std::remove_reference_t<First>>
-  std::function<void()>
-  bind_system(std::function<void(First, Parameters...)> system) {
-    std::function<void(Parameters...)> func = [this,
-                                               system](Parameters... params) {
-      if constexpr (std::is_same_v<Commands, First>) {
-        CommandBuffer &command_buffer = command_queue.emplace_back();
-        system(Commands(command_buffer), params...);
-      } else if constexpr (std::is_same_v<EntityFactory &, First>) {
-        system(entity_factory, params...);
-      } else if constexpr (concepts::QueryConcept<
-                               std::remove_reference_t<First>>) {
-        static u_int64_t last_invocation_id = 0;
-        std::remove_reference_t<First> query =
-            create_query<std::remove_reference_t<First>>(last_invocation_id);
-        last_invocation_id = invocation_id;
-        system(query, params...);
-      }
-    };
+  std::function<void(SystemState)>
+  bind_system(std::function<void(SystemState, First, Parameters...)> system) {
+    std::function<void(SystemState, Parameters...)> func =
+        [this, system](SystemState state, Parameters... params) {
+          if constexpr (std::is_same_v<Commands, First>) {
+            CommandBuffer &command_buffer = command_queue.emplace_back();
+            system(state, Commands(command_buffer), params...);
+          } else if constexpr (std::is_same_v<EntityFactory &, First>) {
+            system(state, entity_factory, params...);
+          } else if constexpr (concepts::QueryConcept<
+                                   std::remove_reference_t<First>>) {
+            std::remove_reference_t<First> query =
+                create_query<std::remove_reference_t<First>>(state);
+            system(state, query, params...);
+          }
+        };
     if constexpr (sizeof...(Parameters) == 0)
       return func;
     else
@@ -256,16 +254,22 @@ class Engine {
     if (invocation_id == 0) {
       for (auto &system : startup_systems) {
         invocation_id++;
-        system();
+        system.first.invocation_id = invocation_id;
+        system.second(system.first);
+        system.first.last_invocation_id = invocation_id;
       }
     }
     for (auto &system : systems) {
       invocation_id++;
-      system();
+      system.first.invocation_id = invocation_id;
+      system.second(system.first);
+      system.first.last_invocation_id = invocation_id;
     }
     for (auto &system : synchronised_systems) {
       invocation_id++;
-      system();
+      system.first.invocation_id = invocation_id;
+      system.second(system.first);
+      system.first.last_invocation_id = invocation_id;
     }
   }
 
@@ -305,10 +309,12 @@ public:
 
   template <class... Parameters>
   Engine &add_system(std::function<void(Parameters...)> system) {
-    systems.push_back(bind_system(std::function<void(Parameters...)>(
-        [system](Parameters... params) -> void {
-          system(std::forward<Parameters>(params)...);
-        })));
+    systems.push_back(std::make_pair(
+        SystemState(),
+        bind_system(std::function<void(SystemState, Parameters...)>(
+            [system](SystemState, Parameters... params) -> void {
+              system(std::forward<Parameters>(params)...);
+            }))));
     return *this;
   }
 
@@ -320,11 +326,12 @@ public:
 
   template <class... Parameters>
   Engine &add_synchronised_system(std::function<void(Parameters...)> system) {
-    synchronised_systems.push_back(
-        bind_system(std::function<void(Parameters...)>(
-            [system](Parameters... params) -> void {
+    synchronised_systems.push_back(std::make_pair(
+        SystemState(),
+        bind_system(std::function<void(SystemState, Parameters...)>(
+            [system](SystemState, Parameters... params) -> void {
               system(std::forward<Parameters>(params)...);
-            })));
+            }))));
     return *this;
   }
 
@@ -337,10 +344,12 @@ public:
 
   template <class... Parameters>
   Engine &add_startup_system(std::function<void(Parameters...)> system) {
-    startup_systems.push_back(bind_system(std::function<void(Parameters...)>(
-        [system](Parameters... params) -> void {
-          system(std::forward<Parameters>(params)...);
-        })));
+    startup_systems.push_back(std::make_pair(
+        SystemState(),
+        bind_system(std::function<void(SystemState, Parameters...)>(
+            [system](SystemState, Parameters... params) -> void {
+              system(std::forward<Parameters>(params)...);
+            }))));
     return *this;
   }
 
