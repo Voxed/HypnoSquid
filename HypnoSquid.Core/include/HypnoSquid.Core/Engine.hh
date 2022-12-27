@@ -60,8 +60,7 @@ class Engine {
   std::vector<CommandBuffer> command_queue;
   EntityFactory entity_factory;
 
-  template <class T>
-  T query(u_int32_t entity, SystemState system_state) = delete;
+  template <class T> T query(u_int32_t entity, SystemState system_state);
 
   template <> u_int32_t query(u_int32_t entity, SystemState system_state) {
     return entity;
@@ -93,7 +92,8 @@ class Engine {
         [&]() {
           std::unordered_set<Entity> old_filtered = std::move(filtered);
           filtered.clear();
-          for (auto e : apply_filter<Filters>(old_filtered, system_state))
+          for (const auto &e :
+               apply_filter<Filters>(old_filtered, system_state))
             filtered.insert(e);
         }(),
         ...);
@@ -108,7 +108,7 @@ class Engine {
     std::unordered_set<Entity> filtered;
     (
         [&]() {
-          for (auto e : apply_filter<Filters>(entities, system_state))
+          for (const auto &e : apply_filter<Filters>(entities, system_state))
             filtered.insert(e);
         }(),
         ...);
@@ -121,13 +121,13 @@ class Engine {
 
     std::unordered_set<Entity> filtered;
     if constexpr (concepts::Changed<Filter>) {
-      for (Entity e : entities)
+      for (const Entity &e : entities)
         if (data.at(typeid(typename Filter::component_type))
                 .at(e)
                 .first.has_changed(system_state))
           filtered.insert(e);
     } else if constexpr (concepts::Not<Filter>) {
-      for (Entity e : entities)
+      for (const Entity &e : entities)
         if (!data.at(typeid(typename Filter::component_type)).contains(e))
           filtered.insert(e);
     } else if constexpr (concepts::All<Filter>) {
@@ -149,14 +149,14 @@ class Engine {
     if (to_intersect.empty()) {
       return entities;
     }
-    for (auto &p : data[to_intersect.back()]) {
+    for (const auto &p : data[to_intersect.back()]) {
       entities.insert(p.first);
     }
     to_intersect.pop_back();
     std::unordered_set<u_int32_t> intersected;
-    for (auto e : entities) {
+    for (const auto &e : entities) {
       bool bad = false;
-      for (auto &i : to_intersect) {
+      for (const auto &i : to_intersect) {
         if (!data[i].contains(e)) {
           bad = true;
           break;
