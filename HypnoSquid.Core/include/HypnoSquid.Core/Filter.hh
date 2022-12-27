@@ -1,7 +1,5 @@
 #pragma once
 
-#include "TypeIterator.hh"
-
 namespace hs {
 namespace core {
 
@@ -48,13 +46,11 @@ template <class Component> struct Not {
 };
 
 template <class... Filters> struct All {
-  using iterator = TypeIterator<0, Filters...>;
   static constexpr bool is_filter = true;
   static constexpr bool is_all = true;
 };
 
 template <class... Filters> struct Any {
-  using iterator = TypeIterator<0, Filters...>;
   static constexpr bool is_filter = true;
   static constexpr bool is_any = true;
 };

@@ -21,6 +21,7 @@
 #include <typeinfo>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 namespace hs {
 namespace core {
@@ -59,66 +60,59 @@ class Engine {
   std::vector<CommandBuffer> command_queue;
   EntityFactory entity_factory;
 
-  template <class Tuple, class Iterator, class... Values>
-  Tuple query_tuple(u_int32_t entity, SystemState system_state,
-                    Values... values) {
-    if constexpr (!Iterator::empty) {
-      using Type = typename Iterator::type;
-      using Next = typename Iterator::next;
-      if constexpr (std::is_same_v<u_int32_t, Type>) {
-        auto value = entity;
-        return query_tuple<Tuple, Next>(entity, system_state, values..., value);
-      } else if constexpr (concepts::ComponentReference<Type>) {
-        using ComponentType = typename Type::value_type;
-        auto &component = data[typeid(ComponentType)].at(entity);
-        auto value = Type(static_cast<ComponentType *>(component.second.get()),
-                          component.first, system_state);
-        return query_tuple<Tuple, Next>(entity, system_state, values..., value);
-      }
-    } else {
-      return std::make_tuple(values...);
-    }
+  template <class T>
+  T query(u_int32_t entity, SystemState system_state) = delete;
+
+  template <> u_int32_t query(u_int32_t entity, SystemState system_state) {
+    return entity;
   }
 
-  template <class FilterIterator>
-  std::unordered_set<Entity>
-  apply_all_filters(std::unordered_set<Entity> entities,
-                    SystemState system_state) {
-    if constexpr (FilterIterator::empty) {
-      return entities;
-    } else {
-      std::unordered_set<Entity> filtered;
-      using Filter = typename FilterIterator::type;
-      for (Entity e : entities) {
-        if constexpr (concepts::Changed<Filter>) {
-          if (data.at(typeid(typename Filter::component_type))
-                  .at(e)
-                  .first.has_changed(system_state))
-            filtered.insert(e);
-        } else if constexpr (concepts::Not<Filter>) {
-          if (!data.at(typeid(typename Filter::component_type)).contains(e))
-            filtered.insert(e);
-        }
-      }
-      return apply_all_filters<typename FilterIterator::next>(filtered,
-                                                              system_state);
-    }
+  template <concepts::ComponentReference T>
+  T query(u_int32_t entity, SystemState system_state) {
+    using ComponentType = typename T::value_type;
+    auto &component = data[typeid(ComponentType)].at(entity);
+    concepts::ComponentReference auto value =
+        T(static_cast<ComponentType *>(component.second.get()), component.first,
+          system_state);
+    return value;
   }
 
-  template <class FilterIterator>
+  template <class... Values>
+  std::tuple<Values...> query_tuple(u_int32_t entity,
+                                    SystemState system_state) {
+    return std::make_tuple(query<Values>(entity, system_state)...);
+  }
+
+  template <class... Filters>
   std::unordered_set<Entity>
-  apply_any_filters(std::unordered_set<Entity> filtered,
+  apply_all_filters(std::type_identity<filters::All<Filters...>>,
                     std::unordered_set<Entity> entities,
                     SystemState system_state) {
-    if constexpr (FilterIterator::empty) {
-      return filtered;
-    } else {
-      using Filter = typename FilterIterator::type;
-      for (auto e : apply_filter<Filter>(entities, system_state))
-        filtered.insert(e);
-      return apply_any_filters<typename FilterIterator::next>(
-          filtered, entities, system_state);
-    }
+    std::unordered_set<Entity> filtered = std::move(entities);
+    (
+        [&filtered, &system_state, this]() {
+          std::unordered_set<Entity> old_filtered = std::move(filtered);
+          filtered.clear();
+          for (auto e : apply_filter<Filters>(old_filtered, system_state))
+            filtered.insert(e);
+        }(),
+        ...);
+    return filtered;
+  }
+
+  template <class... Filters>
+  std::unordered_set<Entity>
+  apply_any_filters(std::type_identity<filters::All<Filters...>>,
+                    std::unordered_set<Entity> entities,
+                    SystemState system_state) {
+    std::unordered_set<Entity> filtered;
+    (
+        [&filtered, &entities, &system_state, this]() {
+          for (auto e : apply_filter<Filters>(entities, system_state))
+            filtered.insert(e);
+        }(),
+        ...);
+    return filtered;
   }
 
   template <class Filter>
@@ -137,11 +131,11 @@ class Engine {
         if (!data.at(typeid(typename Filter::component_type)).contains(e))
           filtered.insert(e);
     } else if constexpr (concepts::All<Filter>) {
-      filtered =
-          apply_all_filters<typename Filter::iterator>(entities, system_state);
+      filtered = apply_all_filters(std::type_identity<Filter>(), entities,
+                                   system_state);
     } else if constexpr (concepts::Any<Filter>) {
-      filtered = apply_any_filters<typename Filter::iterator>({}, entities,
-                                                              system_state);
+      filtered = apply_any_filters(std::type_identity<Filter>(), entities,
+                                   system_state);
     } else if constexpr (concepts::Nop<Filter>) {
       filtered = entities;
     }
@@ -175,44 +169,62 @@ class Engine {
     return intersected;
   }
 
-  template <class T> T create_query(SystemState system_state) {
-    using Tuple = typename decltype(T::entities)::value_type;
-    using Iterator = typename T::component_type_iterator;
-    using Filter = typename T::filter;
-    std::vector<std::type_index> stores =
-        Iterator::template get_type_indices<u_int32_t>();
-    std::vector<Tuple> components;
+  template <class Query, class Filter, class... Args>
+  Query create_query(SystemState system_state) {
+    std::vector<std::type_index> stores;
+    (
+        [&stores]() {
+          if constexpr (!std::is_same_v<Args, Entity>) {
+            stores.emplace_back(typeid(Args));
+          }
+        }(),
+        ...);
+    std::vector<std::tuple<create_component_reference_t<Args>...>> components;
     std::unordered_set<u_int32_t> entities = intersect_stores(stores);
     entities = apply_filter<Filter>(entities, system_state);
     for (u_int32_t e : entities) {
-      components.push_back(query_tuple<Tuple, Iterator>(e, system_state));
+      components.push_back(
+          query_tuple<create_component_reference_t<Args>...>(e, system_state));
     }
-    return T{.entities = std::move(components)};
+    return Query{.entities = std::move(components)};
   }
 
-  template <class First, class... Parameters>
-    requires concepts::is_in<First, Commands, EntityFactory &> ||
-             concepts::QueryConcept<std::remove_reference_t<First>>
+  template <class Query, class First, class... Args>
+    requires(!concepts::Filter<First>)
+  Query create_query(SystemState state) {
+    return create_query<Query, filters::Nop, First, Args...>(state);
+  }
+
+  template <class T>
+  T instantiate_parameter(std::type_identity<T>, SystemState state);
+
+  template <>
+  EntityFactory &instantiate_parameter(std::type_identity<EntityFactory &>,
+                                       SystemState state) {
+    return entity_factory;
+  }
+
+  template <>
+  Commands instantiate_parameter(std::type_identity<Commands>,
+                                 SystemState state) {
+    CommandBuffer &command_buffer = command_queue.emplace_back();
+    return Commands(command_buffer);
+  }
+
+  template <class... Args>
+  Query<Args...> instantiate_parameter(std::type_identity<Query<Args...>>,
+                                       SystemState state) {
+    return create_query<Query<Args...>, Args...>(state);
+  }
+
+  template <class... Parameters>
   std::function<void(SystemState)>
-  bind_system(std::function<void(SystemState, First, Parameters...)> system) {
-    std::function<void(SystemState, Parameters...)> func =
-        [this, system](SystemState state, Parameters... params) {
-          if constexpr (std::is_same_v<Commands, First>) {
-            CommandBuffer &command_buffer = command_queue.emplace_back();
-            system(state, Commands(command_buffer), params...);
-          } else if constexpr (std::is_same_v<EntityFactory &, First>) {
-            system(state, entity_factory, params...);
-          } else if constexpr (concepts::QueryConcept<
-                                   std::remove_reference_t<First>>) {
-            std::remove_reference_t<First> query =
-                create_query<std::remove_reference_t<First>>(state);
-            system(state, query, params...);
-          }
-        };
-    if constexpr (sizeof...(Parameters) == 0)
-      return func;
-    else
-      return bind_system(func);
+  bind_system(std::function<void(SystemState, Parameters...)> system) {
+    std::function<void(SystemState)> func = [this, system](SystemState state) {
+      system(state,
+             instantiate_parameter(std::type_identity<Parameters>(), state)...);
+    };
+    return func;
   }
 
   void

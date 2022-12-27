@@ -32,22 +32,22 @@ void test(Commands commands, EntityFactory &entity_factory) {
   }
 }
 
-void test2(Query<TestData, Entity, const TestData2> &query,
-           Query<TestData> &query2) {
+void test2(Query<TestData, Entity, const TestData2> query,
+           Query<TestData> query2) {
   for (auto t : query.entities) {
     auto &v = get<0>(t);
-    if (get<1>(t) == 53)
+    if (get<1>(t) == 52)
       v.get_mut()->a;
     auto &v2 = get<2>(t);
 
-    // std::cout << v->a << ":" << get<1>(t) << std::endl;
+    std::cout << v->a << ":" << get<1>(t) << std::endl;
   }
 }
 
 void test3(Query<All<Changed<TestData>, Not<TestData3>>, TestData> q) {
   for (auto t : q.entities) {
     auto c = get<0>(t);
-    // std::cout << "CHANGED!" << std::endl;
+    std::cout << "CHANGED!" << c->a << std::endl;
   }
 }
 
@@ -55,6 +55,21 @@ void test3(Query<All<Changed<TestData>, Not<TestData3>>, TestData> q) {
 void sleep_system(EntityFactory &ef) {
   std::this_thread::sleep_for(std::chrono::milliseconds(16));
 }
+
+template <class... Args> void func3(Args... values) {
+  std::cout << sizeof...(Args) << std::endl;
+  ([](auto v) { std::cout << v << std::endl; }(values), ...);
+}
+
+template <class T> T func2() {
+  std::cout << typeid(T).name() << std::endl;
+  if constexpr (std::is_same_v<T, int>)
+    return 69;
+  if constexpr (std::is_same_v<T, float>)
+    return 0.5;
+}
+
+template <class... Args> void func() { func3(func2<Args>()...); }
 
 int main() {
   hs::core::Engine engine;
@@ -65,6 +80,8 @@ int main() {
       // update.
       .add_synchronised_system(sleep_system)
       .run();
+
+  func<int, float>();
 
   return 0;
 }

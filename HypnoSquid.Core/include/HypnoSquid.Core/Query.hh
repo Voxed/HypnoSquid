@@ -2,7 +2,6 @@
 
 #include "ComponentReference.hh"
 #include "Filter.hh"
-#include "TypeIterator.hh"
 #include <type_traits>
 
 namespace hs {
@@ -31,23 +30,31 @@ struct QueryTypeWrapper<T> {
   using processed = const ComponentReference<T>;
 };
 
+template <class T> struct create_component_reference {
+  using type = ComponentReference<T>;
+};
+
+template <class T> struct create_component_reference<const T> {
+  using type = const ComponentReference<std::remove_const_t<T>>;
+};
+
+template <> struct create_component_reference<u_int32_t> {
+  using type = u_int32_t;
+};
+
+template <class T>
+using create_component_reference_t =
+    typename create_component_reference<T>::type;
+
 template <class... Components> struct Query {
   static constexpr bool is_query = true;
-  using component_type_iterator =
-      TypeIterator<0, typename QueryTypeWrapper<Components>::processed...>;
-  std::vector<std::tuple<typename QueryTypeWrapper<Components>::processed...>>
-      entities;
-  using filter = filters::Nop;
+  std::vector<std::tuple<create_component_reference_t<Components>...>> entities;
 };
 
 template <concepts::Filter Filter, class... Components>
 struct Query<Filter, Components...> {
   static constexpr bool is_query = true;
-  using component_type_iterator =
-      TypeIterator<0, typename QueryTypeWrapper<Components>::processed...>;
-  std::vector<std::tuple<typename QueryTypeWrapper<Components>::processed...>>
-      entities;
-  using filter = Filter;
+  std::vector<std::tuple<create_component_reference_t<Components>...>> entities;
 };
 
 } // namespace core
