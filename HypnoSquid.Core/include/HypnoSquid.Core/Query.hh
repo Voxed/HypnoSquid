@@ -12,24 +12,6 @@ template <class T>
 concept QueryConcept = requires { T::is_query; };
 }
 
-template <class T> struct QueryTypeWrapper {
-  using processed = T;
-};
-
-template <class T>
-  requires(!std::is_const_v<std::remove_pointer_t<T>> &&
-           !std::is_same_v<u_int32_t, T>)
-struct QueryTypeWrapper<T> {
-  using processed = ComponentReference<std::remove_pointer_t<T>>;
-};
-
-template <class T>
-  requires(std::is_const_v<std::remove_pointer_t<T>> &&
-           !std::is_same_v<u_int32_t, T>)
-struct QueryTypeWrapper<T> {
-  using processed = const ComponentReference<T>;
-};
-
 template <class T> struct create_component_reference {
   using type = ComponentReference<T>;
 };
