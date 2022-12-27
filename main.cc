@@ -56,21 +56,6 @@ void sleep_system(EntityFactory &ef) {
   std::this_thread::sleep_for(std::chrono::milliseconds(16));
 }
 
-template <class... Args> void func3(Args... values) {
-  std::cout << sizeof...(Args) << std::endl;
-  ([](auto v) { std::cout << v << std::endl; }(values), ...);
-}
-
-template <class T> T func2() {
-  std::cout << typeid(T).name() << std::endl;
-  if constexpr (std::is_same_v<T, int>)
-    return 69;
-  if constexpr (std::is_same_v<T, float>)
-    return 0.5;
-}
-
-template <class... Args> void func() { func3(func2<Args>()...); }
-
 int main() {
   hs::core::Engine engine;
   engine.add_system(test)
@@ -80,8 +65,6 @@ int main() {
       // update.
       .add_synchronised_system(sleep_system)
       .run();
-
-  func<int, float>();
 
   return 0;
 }
