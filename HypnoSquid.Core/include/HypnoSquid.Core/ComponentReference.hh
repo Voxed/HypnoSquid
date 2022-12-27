@@ -8,11 +8,6 @@
 namespace hs {
 namespace core {
 
-namespace concepts {
-template <class T>
-concept ComponentReference = requires { T::is_component_reference; };
-}
-
 template <class T> class ComponentReference {
   T *data = nullptr;
   ComponentState &component_state;
@@ -26,7 +21,6 @@ public:
   ComponentReference() = default;
 
   using value_type = std::remove_const_t<T>;
-  static constexpr bool is_component_reference = true;
 
   [[nodiscard]] bool has_changed() const {
     return component_state.has_changed(system_state);
@@ -41,6 +35,11 @@ public:
 
   const value_type *operator->() const { return get(); }
 };
+
+namespace concepts {
+template <class T>
+concept ComponentReference = specialization_of<ComponentReference, T>;
+}
 
 } // namespace core
 } // namespace hs

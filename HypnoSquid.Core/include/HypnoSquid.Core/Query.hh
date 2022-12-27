@@ -7,11 +7,6 @@
 namespace hs {
 namespace core {
 
-namespace concepts {
-template <class T>
-concept QueryConcept = requires { T::is_query; };
-}
-
 template <class T> struct create_component_reference {
   using type = ComponentReference<T>;
 };
@@ -29,13 +24,11 @@ using create_component_reference_t =
     typename create_component_reference<T>::type;
 
 template <class... Components> struct Query {
-  static constexpr bool is_query = true;
   std::vector<std::tuple<create_component_reference_t<Components>...>> entities;
 };
 
 template <concepts::Filter Filter, class... Components>
 struct Query<Filter, Components...> {
-  static constexpr bool is_query = true;
   std::vector<std::tuple<create_component_reference_t<Components>...>> entities;
 };
 

@@ -28,7 +28,8 @@ constexpr bool specialization_of_impl(std::type_identity<T<Args...>>) {
 } // namespace
 
 template <template <class...> class U, class T>
-concept specialization_of = specialization_of_impl<U>(std::type_identity<T>());
+concept specialization_of =
+    specialization_of_impl<U>(std::type_identity<std::remove_const_t<T>>());
 
 } // namespace concepts
 
