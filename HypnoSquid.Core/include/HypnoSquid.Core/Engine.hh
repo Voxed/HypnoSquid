@@ -114,33 +114,51 @@ class Engine {
         ...);
     return filtered;
   }
-
-  template <class Filter>
+  
+  template <concepts::Nop Filter>
   std::unordered_set<Entity> apply_filter(std::unordered_set<Entity> entities,
                                           SystemState system_state) {
+    return entities;
+  }
 
+  template <concepts::Changed Filter>
+  std::unordered_set<Entity>
+  apply_filter(const std::unordered_set<Entity> &entities,
+               SystemState system_state) {
     std::unordered_set<Entity> filtered;
-    if constexpr (concepts::Changed<Filter>) {
-      for (const Entity &e : entities)
-        if (data.at(typeid(typename Filter::component_type))
-                .at(e)
-                .first.has_changed(system_state))
-          filtered.insert(e);
-    } else if constexpr (concepts::Not<Filter>) {
-      for (const Entity &e : entities)
-        if (!data.at(typeid(typename Filter::component_type)).contains(e))
-          filtered.insert(e);
-    } else if constexpr (concepts::All<Filter>) {
-      filtered = apply_all_filters(std::type_identity<Filter>(), entities,
-                                   system_state);
-    } else if constexpr (concepts::Any<Filter>) {
-      filtered = apply_any_filters(std::type_identity<Filter>(), entities,
-                                   system_state);
-    } else if constexpr (concepts::Nop<Filter>) {
-      filtered = entities;
-    }
-
+    for (const Entity &e : entities)
+      if (data.at(typeid(typename Filter::component_type))
+              .at(e)
+              .first.has_changed(system_state))
+        filtered.insert(e);
     return filtered;
+  }
+
+  template <concepts::Not Filter>
+  std::unordered_set<Entity>
+  apply_filter(const std::unordered_set<Entity> &entities,
+               SystemState system_state) {
+    std::unordered_set<Entity> filtered;
+    for (const Entity &e : entities)
+      if (!data.at(typeid(typename Filter::component_type)).contains(e))
+        filtered.insert(e);
+    return filtered;
+  }
+
+  template <concepts::All Filter>
+  std::unordered_set<Entity>
+  apply_filter(const std::unordered_set<Entity> &entities,
+               SystemState system_state) {
+    return apply_all_filters(std::type_identity<Filter>(), entities,
+                             system_state);
+  }
+
+  template <concepts::Any Filter>
+  std::unordered_set<Entity>
+  apply_filter(const std::unordered_set<Entity> &entities,
+               SystemState system_state) {
+    return apply_any_filters(std::type_identity<Filter>(), entities,
+                             system_state);
   }
 
   std::unordered_set<u_int32_t>

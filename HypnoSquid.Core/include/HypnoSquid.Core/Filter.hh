@@ -1,66 +1,50 @@
 #pragma once
 
+#include "common.hh"
+#include <iostream>
+
 namespace hs {
 namespace core {
 
-namespace concepts {
-template <class T>
-concept Filter = requires { T::is_filter; };
-}
-/*
-template <class... Filters> struct Filter {
-  static constexpr bool is_filter = true;
-  using iterator = TypeIterator<0, Filters...>;
-};
-*/
-
-namespace concepts {
-template <class T>
-concept Changed = requires { T::is_changed; };
-
-template <class T>
-concept Not = requires { T::is_not; };
-
-template <class T>
-concept Nop = requires { T::is_nop; };
-
-template <class T>
-concept All = requires { T::is_all; };
-
-template <class T>
-concept Any = requires { T::is_any; };
-} // namespace concepts
+struct Filter {};
 
 namespace filters {
 
-template <class Component> struct Changed {
+template <class Component> struct Changed : Filter {
   using component_type = Component;
-  static constexpr bool is_changed = true;
-  static constexpr bool is_filter = true;
 };
 
-template <class Component> struct Not {
+template <class Component> struct Not : Filter {
   using component_type = Component;
-  static constexpr bool is_not = true;
-  static constexpr bool is_filter = true;
 };
 
-template <class... Filters> struct All {
-  static constexpr bool is_filter = true;
-  static constexpr bool is_all = true;
-};
+template <class... Filters> struct All : Filter {};
 
-template <class... Filters> struct Any {
-  static constexpr bool is_filter = true;
-  static constexpr bool is_any = true;
-};
+template <class... Filters> struct Any : Filter {};
 
-struct Nop {
-  static constexpr bool is_nop = true;
-  static constexpr bool is_filter = true;
-};
+struct Nop : Filter {};
 
 } // namespace filters
+
+namespace concepts {
+template <class T>
+concept Filter = std::is_base_of_v<Filter, T>;
+
+template <class T>
+concept Changed = specialization_of<filters::Changed, T>;
+
+template <class T>
+concept Not = specialization_of<filters::Not, T>;
+
+template <class T>
+concept Nop = std::is_same_v<filters::Nop, T>;
+
+template <class T>
+concept All = specialization_of<filters::All, T>;
+
+template <class T>
+concept Any = specialization_of<filters::Any, T>;
+} // namespace concepts
 
 } // namespace core
 } // namespace hs
