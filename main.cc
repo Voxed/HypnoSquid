@@ -56,18 +56,6 @@ void sleep_system(EntityFactory &ef) {
   std::this_thread::sleep_for(std::chrono::milliseconds(16));
 }
 
-template <class T, class... Args> constexpr bool TEST(std::type_identity<T>) {
-  return false;
-}
-
-template <template <class...> class T, class... Args>
-constexpr bool TEST(std::type_identity<T<Args...>>) {
-  return true;
-}
-
-template <class T>
-concept TEST2 = TEST(std::type_identity<T>());
-
 int main() {
   hs::core::Engine engine;
   engine.add_system(test)
@@ -77,8 +65,6 @@ int main() {
       // update.
       .add_synchronised_system(sleep_system)
       .run();
-
-  std::cout << TEST(std::type_identity<std::vector<int>>()) << std::endl;
-
+  
   return 0;
 }
