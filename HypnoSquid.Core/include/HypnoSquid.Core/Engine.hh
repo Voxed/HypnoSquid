@@ -90,7 +90,7 @@ class Engine {
                     SystemState system_state) {
     std::unordered_set<Entity> filtered = std::move(entities);
     (
-        [&filtered, &system_state, this]() {
+        [&]() {
           std::unordered_set<Entity> old_filtered = std::move(filtered);
           filtered.clear();
           for (auto e : apply_filter<Filters>(old_filtered, system_state))
@@ -107,7 +107,7 @@ class Engine {
                     SystemState system_state) {
     std::unordered_set<Entity> filtered;
     (
-        [&filtered, &entities, &system_state, this]() {
+        [&]() {
           for (auto e : apply_filter<Filters>(entities, system_state))
             filtered.insert(e);
         }(),
@@ -173,7 +173,7 @@ class Engine {
   Query create_query(SystemState system_state) {
     std::vector<std::type_index> stores;
     (
-        [&stores]() {
+        [&]() {
           if constexpr (!std::is_same_v<Args, Entity>) {
             stores.emplace_back(typeid(Args));
           }
@@ -220,7 +220,7 @@ class Engine {
   template <class... Parameters>
   std::function<void(SystemState)>
   bind_system(std::function<void(SystemState, Parameters...)> system) {
-    std::function<void(SystemState)> func = [this, system](SystemState state) {
+    std::function<void(SystemState)> func = [=](SystemState state) {
       system(state,
              instantiate_parameter(std::type_identity<Parameters>(), state)...);
     };
@@ -324,7 +324,7 @@ public:
     systems.push_back(std::make_pair(
         SystemState(),
         bind_system(std::function<void(SystemState, Parameters...)>(
-            [system](SystemState, Parameters... params) -> void {
+            [=](SystemState, Parameters... params) -> void {
               system(std::forward<Parameters>(params)...);
             }))));
     return *this;
@@ -341,7 +341,7 @@ public:
     synchronised_systems.push_back(std::make_pair(
         SystemState(),
         bind_system(std::function<void(SystemState, Parameters...)>(
-            [system](SystemState, Parameters... params) -> void {
+            [=](SystemState, Parameters... params) -> void {
               system(std::forward<Parameters>(params)...);
             }))));
     return *this;
@@ -359,7 +359,7 @@ public:
     startup_systems.push_back(std::make_pair(
         SystemState(),
         bind_system(std::function<void(SystemState, Parameters...)>(
-            [system](SystemState, Parameters... params) -> void {
+            [=](SystemState, Parameters... params) -> void {
               system(std::forward<Parameters>(params)...);
             }))));
     return *this;
