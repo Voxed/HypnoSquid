@@ -60,13 +60,10 @@ struct QueryBufferLayoutItem {
   }
 };
 
-static u_int32_t buffid = 0;
-
 struct QueryBuffer {
   std::vector<QueryBufferLayoutItem> layout;
   std::unordered_map<u_int32_t, std::vector<QueryBufferItem>> items;
   u_int64_t last_changed = 0;
-  u_int32_t debug_id = buffid++;
 
   template <template <class...> class Query, class... Args>
   static QueryBuffer from_query(std::type_identity<Query<Args...>>) {
@@ -91,62 +88,18 @@ struct QueryBuffer {
   }
 };
 
-template <class... Components> struct Query {
+template <class... Components> class QueryBase {
+protected:
   QueryBuffer &buffer;
   SystemState &system_state;
   u_int64_t last_updated = 0;
-  std::vector<std::tuple<create_component_reference_t<Components>...>> entities;
-
-  template <class T>
-  T create(std::type_identity<T>, const QueryBufferItem &item);
-
-  template <>
-  u_int32_t create<u_int32_t>(std::type_identity<u_int32_t>,
-                              const QueryBufferItem &item) {
-    return item.entity_id;
-  }
-
-  template <template <class> class T, class Arg>
-    requires concepts::ComponentReference<T<Arg>>
-  T<Arg> create(std::type_identity<T<Arg>>, const QueryBufferItem &item) {
-    return T(static_cast<Arg *>(item.component.data), item.component.state,
-             system_state);
-  }
-
-  void update() {
-    entities.clear();
-    for (auto &p : buffer.items) {
-      int idx = 0;
-      entities.push_back(std::make_tuple(create(
-          std::type_identity<
-              std::remove_const_t<create_component_reference_t<Components>>>(),
-          p.second.at(([&]() { return idx++; }())))...));
-    }
-  }
-
-  std::vector<std::tuple<create_component_reference_t<Components>...>> iter() {
-    if (last_updated <= buffer.last_changed) {
-      update();
-      last_updated = system_state.invocation_id;
-    }
-
-    return entities;
-  }
-};
-
-// Annoying code duplication
-template <concepts::Filter Filter, class... Components>
-struct Query<Filter, Components...> {
-  QueryBuffer &buffer;
-  SystemState &system_state;
-  u_int64_t last_updated = 0;
-  u_int64_t last_filtered = 0;
   std::unordered_map<u_int32_t,
                      std::tuple<create_component_reference_t<Components>...>>
       entities;
-  std::function<std::unordered_set<u_int32_t>(std::unordered_set<u_int32_t>)>
-      filter;
-  std::vector<std::tuple<create_component_reference_t<Components>...>> filtered;
+
+public:
+  QueryBase(QueryBuffer &buffer, SystemState &system_state)
+      : buffer(buffer), system_state(system_state) {}
 
   template <class T>
   T create(std::type_identity<T>, const QueryBufferItem &item);
@@ -175,23 +128,57 @@ struct Query<Filter, Components...> {
                               p.second.at(([&]() { return idx++; }())))...)));
     }
   }
+};
+
+template <class... Components> struct Query : public QueryBase<Components...> {
+  Query(QueryBuffer &buffer, SystemState &system_state)
+      : QueryBase<Components...>(buffer, system_state) {}
 
   std::vector<std::tuple<create_component_reference_t<Components>...>> iter() {
-    if (last_updated <= buffer.last_changed) {
-      update();
-      last_updated = system_state.invocation_id;
+    if (this->last_updated <= this->buffer.last_changed) {
+      this->update();
+      this->last_updated = this->system_state.invocation_id;
     }
 
-    if (last_filtered <= system_state.invocation_id) {
+    std::vector<std::tuple<create_component_reference_t<Components>...>> e;
+    for (auto &p : this->entities) {
+      e.push_back(p.second);
+    }
+
+    return e;
+  }
+};
+
+// Annoying code duplication
+template <concepts::Filter Filter, class... Components>
+struct Query<Filter, Components...> : public QueryBase<Components...> {
+  u_int64_t last_filtered = 0;
+  std::function<std::unordered_set<u_int32_t>(std::unordered_set<u_int32_t>)>
+      filter;
+  std::vector<std::tuple<create_component_reference_t<Components>...>> filtered;
+
+  Query(QueryBuffer &buffer, SystemState &system_state,
+        std::function<
+            std::unordered_set<u_int32_t>(std::unordered_set<u_int32_t>)>
+            filter)
+      : filter(filter), QueryBase<Components...>(buffer, system_state) {}
+
+  std::vector<std::tuple<create_component_reference_t<Components>...>> iter() {
+    if (this->last_updated <= this->buffer.last_changed) {
+      this->update();
+      this->last_updated = this->system_state.invocation_id;
+    }
+
+    if (last_filtered <= this->system_state.invocation_id) {
       std::unordered_set<u_int32_t> e;
-      for (auto &p : entities) {
+      for (auto &p : this->entities) {
         e.insert(p.first);
       }
       filtered.clear();
       for (auto &p : filter(e)) {
-        filtered.push_back(entities.at(p));
+        filtered.push_back(this->entities.at(p));
       }
-      last_filtered = system_state.invocation_id + 1;
+      last_filtered = this->system_state.invocation_id + 1;
     }
 
     return filtered;

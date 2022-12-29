@@ -1,5 +1,6 @@
 #include <functional>
 #include <iostream>
+#include <string>
 #include <thread>
 
 #include "HypnoSquid.Core/Engine.hh"
@@ -38,10 +39,7 @@ void test2(Query<TestData, Entity, const TestData2> &query,
     auto &v = get<0>(t);
     if (get<1>(t) == 52)
       v.get_mut()->a;
-    // v.get_mut();
     auto &v2 = get<2>(t);
-
-    // std::cout << v->a << ":" << get<1>(t) << std::endl;
   }
 }
 
