@@ -93,8 +93,6 @@ template <class... Components> struct Query {
   SystemState &system_state;
   u_int64_t last_updated = 0;
   std::vector<std::tuple<create_component_reference_t<Components>...>> entities;
-  std::function<std::unordered_set<u_int32_t>(std::unordered_set<u_int32_t>)>
-      filter;
 
   template <class T>
   T create(std::type_identity<T>, const QueryBufferItem &item);

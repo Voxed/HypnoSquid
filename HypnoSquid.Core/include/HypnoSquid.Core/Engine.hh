@@ -63,12 +63,6 @@ class Engine {
       queries;
   std::vector<QueryBuffer> query_buffers;
 
-  std::unordered_map<
-      u_int32_t,
-      std::unordered_map<u_int32_t, std::function<std::unordered_set<Entity>(
-                                        std::unordered_set<Entity>)>>>
-      query_filters;
-
   u_int64_t invocation_id = 0;
   std::vector<System> systems;
   std::vector<System> synchronised_systems;
@@ -205,28 +199,30 @@ class Engine {
       query_buffers.template emplace_back(
           QueryBuffer::from_query(std::type_identity<Query<First, Args...>>()));
       if constexpr (concepts::Filter<First>) {
-        query_filters[system_id].emplace(
+        queries[system_id].emplace(
             parameter_id,
-            [this, &state](const std::unordered_set<Entity> &entities) {
-              return apply_filter<First>(entities, state);
-            });
-      } else {
-        query_filters[system_id].emplace(
+            std::unique_ptr<void, void (*)(void const *)>(
+                new Query<First, Args...>{
+                    .buffer = query_buffers.back(),
+                    .system_state = state,
+                    .filter = [this, &state](const std::unordered_set<Entity> &entities) {
+                      return apply_filter<First>(entities, state);
+                    }},
+                [](void const *ptr) {
+                  delete static_cast<Query<Args...> const *>(ptr);
+                }));
+      }else{
+        queries[system_id].emplace(
             parameter_id,
-            [this, &state](const std::unordered_set<Entity> &entities) {
-              return apply_filter<filters::Nop>(entities, state);
-            });
+            std::unique_ptr<void, void (*)(void const *)>(
+                new Query<First, Args...>{
+                    .buffer = query_buffers.back(),
+                    .system_state = state
+                },
+                [](void const *ptr) {
+                  delete static_cast<Query<Args...> const *>(ptr);
+                }));
       }
-      queries[system_id].emplace(
-          parameter_id,
-          std::unique_ptr<void, void (*)(void const *)>(
-              new Query<First, Args...>{
-                  .buffer = query_buffers.back(),
-                  .system_state = state,
-                  .filter = query_filters[system_id].at(parameter_id)},
-              [](void const *ptr) {
-                delete static_cast<Query<Args...> const *>(ptr);
-              }));
     }
     return *static_cast<Query<First, Args...> *>(
         queries[system_id]
