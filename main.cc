@@ -34,18 +34,19 @@ void test(Commands commands, EntityFactory &entity_factory) {
 
 void test2(Query<TestData, Entity, const TestData2> &query,
            Query<TestData> &query2) {
-  query2.iter();
   for (auto t : query.iter()) {
     auto &v = get<0>(t);
     if (get<1>(t) == 52)
       v.get_mut()->a;
+    // v.get_mut();
     auto &v2 = get<2>(t);
 
-    std::cout << v->a << ":" << get<1>(t) << std::endl;
+    // std::cout << v->a << ":" << get<1>(t) << std::endl;
   }
 }
 
 void test3(Query<All<Changed<TestData>, Not<TestData3>>, TestData, Entity> &q) {
+  std::cout << "New" << std::endl;
   for (auto t : q.iter()) {
     auto c = get<0>(t);
     std::cout << "CHANGED!" << c->a << ":" << get<1>(t) << std::endl;
@@ -60,8 +61,8 @@ void sleep_system(EntityFactory &ef) {
 int main() {
   hs::core::Engine engine;
   engine.add_system(test)
-      .add_system(test2)
       .add_system(test3)
+      .add_system(test2)
       // Synchronised systems will run synchronised at the end of each
       // update.
       .add_synchronised_system(sleep_system)

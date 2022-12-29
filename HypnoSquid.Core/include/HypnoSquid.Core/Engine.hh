@@ -56,12 +56,12 @@ class Engine {
   std::unordered_map<u_int32_t, std::unordered_set<std::type_index>>
       entity_components;
 
-  u_int32_t next_system_id;
+  u_int32_t next_system_id = 0;
   std::unordered_map<
       u_int32_t, std::unordered_map<
                      u_int32_t, std::unique_ptr<void, void (*)(void const *)>>>
       queries;
-  std::vector<QueryBuffer> query_buffers;
+  std::vector<std::unique_ptr<QueryBuffer>> query_buffers;
 
   u_int64_t invocation_id = 0;
   std::vector<System> systems;
@@ -196,14 +196,16 @@ class Engine {
                         SystemState &state, u_int32_t parameter_id,
                         u_int32_t system_id) {
     if (!queries[system_id].contains(parameter_id)) {
-      query_buffers.template emplace_back(
-          QueryBuffer::from_query(std::type_identity<Query<First, Args...>>()));
+      std::cout << parameter_id << "," << system_id << std::endl;
+      query_buffers.emplace_back(
+          std::unique_ptr<QueryBuffer>(new QueryBuffer(QueryBuffer::from_query(std::type_identity<Query<First, Args...>>()))));
+      std::cout << query_buffers.size() << std::endl;
       if constexpr (concepts::Filter<First>) {
         queries[system_id].emplace(
             parameter_id,
             std::unique_ptr<void, void (*)(void const *)>(
                 new Query<First, Args...>{
-                    .buffer = query_buffers.back(),
+                    .buffer = *(query_buffers.back().get()),
                     .system_state = state,
                     .filter = [this, &state](const std::unordered_set<Entity> &entities) {
                       return apply_filter<First>(entities, state);
@@ -216,7 +218,7 @@ class Engine {
             parameter_id,
             std::unique_ptr<void, void (*)(void const *)>(
                 new Query<First, Args...>{
-                    .buffer = query_buffers.back(),
+                    .buffer = *(query_buffers.back().get()),
                     .system_state = state
                 },
                 [](void const *ptr) {
@@ -233,8 +235,8 @@ class Engine {
   template <class... Parameters>
   std::function<void(SystemState &)>
   bind_system(std::function<void(SystemState &, Parameters...)> system) {
-    u_int32_t system_id = next_system_id++;
-    std::function<void(SystemState &)> func = [=](SystemState &state) {
+    int system_id = next_system_id++;
+    std::function<void(SystemState &)> func = [&, system_id, system](SystemState &state) {
       int i = 0;
       system(state,
              instantiate_parameter(
@@ -250,7 +252,7 @@ class Engine {
   void update_queries(u_int32_t entity) {
     for (auto &buff : query_buffers) {
       bool belongs = true;
-      for (auto &l : buff.layout) {
+      for (auto &l : buff->layout) {
         if (l.type == COMPONENT) {
           if (!entity_components[entity].contains(l.data.component_type)) {
             belongs = false;
@@ -258,9 +260,9 @@ class Engine {
           }
         }
       }
-      if (!buff.items.contains(entity) && belongs) {
+      if (!buff->items.contains(entity) && belongs) {
         std::vector<QueryBufferItem> items;
-        for (auto &l : buff.layout) {
+        for (auto &l : buff->layout) {
           switch (l.type) {
           case ENTITY:
             items.push_back(QueryBufferItem{.entity_id = entity});
@@ -273,11 +275,12 @@ class Engine {
           }
           }
         }
-        buff.items.emplace(entity, items);
-        buff.last_changed = invocation_id;
+        buff->items.emplace(entity, items);
+        buff->last_changed = invocation_id;
       }
-      if (buff.items.contains(entity) && !belongs) {
-        buff.items.erase(entity);
+      if (buff->items.contains(entity) && !belongs) {
+        buff->items.erase(entity);
+        buff->last_changed = invocation_id;
       }
     }
   }
@@ -387,7 +390,7 @@ public:
     systems.push_back(std::make_pair(
         SystemState{.last_invocation_id = 0, .invocation_id = 0},
         bind_system(std::function<void(SystemState &, Parameters...)>(
-            [=](SystemState &, Parameters... params) -> void {
+            [&, system](SystemState &, Parameters... params) -> void {
               system(std::forward<Parameters>(params)...);
             }))));
     return *this;
@@ -404,7 +407,7 @@ public:
     synchronised_systems.push_back(std::make_pair(
         SystemState{.last_invocation_id = 0, .invocation_id = 0},
         bind_system(std::function<void(SystemState &, Parameters...)>(
-            [=](SystemState &, Parameters... params) -> void {
+            [&, system](SystemState &, Parameters... params) -> void {
               system(std::forward<Parameters>(params)...);
             }))));
     return *this;
@@ -422,7 +425,7 @@ public:
     startup_systems.push_back(std::make_pair(
         SystemState{.last_invocation_id = 0, .invocation_id = 0},
         bind_system(std::function<void(SystemState &, Parameters...)>(
-            [=](SystemState &, Parameters... params) -> void {
+            [&, system](SystemState &, Parameters... params) -> void {
               system(std::forward<Parameters>(params)...);
             }))));
     return *this;

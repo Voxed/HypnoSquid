@@ -60,10 +60,13 @@ struct QueryBufferLayoutItem {
   }
 };
 
+static u_int32_t buffid = 0;
+
 struct QueryBuffer {
   std::vector<QueryBufferLayoutItem> layout;
   std::unordered_map<u_int32_t, std::vector<QueryBufferItem>> items;
   u_int64_t last_changed = 0;
+  u_int32_t debug_id = buffid++;
 
   template <template <class...> class Query, class... Args>
   static QueryBuffer from_query(std::type_identity<Query<Args...>>) {
