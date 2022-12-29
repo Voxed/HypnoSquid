@@ -2,9 +2,11 @@
 
 #include "ComponentReference.hh"
 #include "Filter.hh"
+#include <functional>
 #include <tuple>
 #include <type_traits>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace hs {
 namespace core {
@@ -91,6 +93,8 @@ template <class... Components> struct Query {
   SystemState &system_state;
   u_int64_t last_updated = 0;
   std::vector<std::tuple<create_component_reference_t<Components>...>> entities;
+  std::function<std::unordered_set<u_int32_t>(std::unordered_set<u_int32_t>)>
+      filter;
 
   template <class T>
   T create(std::type_identity<T>, const QueryBufferItem &item);
@@ -104,7 +108,6 @@ template <class... Components> struct Query {
   template <template <class> class T, class Arg>
     requires concepts::ComponentReference<T<Arg>>
   T<Arg> create(std::type_identity<T<Arg>>, const QueryBufferItem &item) {
-    std::cout << item.entity_id << std::endl;
     return T(static_cast<Arg *>(item.component.data), item.component.state,
              system_state);
   }
@@ -130,12 +133,19 @@ template <class... Components> struct Query {
   }
 };
 
+// Annoying code duplication
 template <concepts::Filter Filter, class... Components>
 struct Query<Filter, Components...> {
   QueryBuffer &buffer;
   SystemState &system_state;
   u_int64_t last_updated = 0;
-  std::vector<std::tuple<create_component_reference_t<Components>...>> entities;
+  u_int64_t last_filtered = 0;
+  std::unordered_map<u_int32_t,
+                     std::tuple<create_component_reference_t<Components>...>>
+      entities;
+  std::function<std::unordered_set<u_int32_t>(std::unordered_set<u_int32_t>)>
+      filter;
+  std::vector<std::tuple<create_component_reference_t<Components>...>> filtered;
 
   template <class T>
   T create(std::type_identity<T>, const QueryBufferItem &item);
@@ -155,14 +165,13 @@ struct Query<Filter, Components...> {
 
   void update() {
     entities.clear();
-    std::cout << "update" << std::endl;
     for (auto &p : buffer.items) {
       int idx = 0;
-      std::cout << "PUSHING!" << std::endl;
-      entities.push_back(std::make_tuple(create(
-          std::type_identity<
-              std::remove_const_t<create_component_reference_t<Components>>>(),
-          p.second[([&]() { return idx++; }())])...));
+      entities.emplace(
+          p.first, std::move(std::make_tuple(
+                       create(std::type_identity<std::remove_const_t<
+                                  create_component_reference_t<Components>>>(),
+                              p.second.at(([&]() { return idx++; }())))...)));
     }
   }
 
@@ -172,7 +181,19 @@ struct Query<Filter, Components...> {
       last_updated = system_state.invocation_id;
     }
 
-    return entities;
+    if (last_filtered <= system_state.invocation_id) {
+      std::unordered_set<u_int32_t> e;
+      for (auto &p : entities) {
+        e.insert(p.first);
+      }
+      filtered.clear();
+      for (auto &p : filter(e)) {
+        filtered.push_back(entities.at(p));
+      }
+      last_filtered = system_state.invocation_id + 1;
+    }
+
+    return filtered;
   }
 };
 

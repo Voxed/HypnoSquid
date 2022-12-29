@@ -63,6 +63,12 @@ class Engine {
       queries;
   std::vector<QueryBuffer> query_buffers;
 
+  std::unordered_map<
+      u_int32_t,
+      std::unordered_map<u_int32_t, std::function<std::unordered_set<Entity>(
+                                        std::unordered_set<Entity>)>>>
+      query_filters;
+
   u_int64_t invocation_id = 0;
   std::vector<System> systems;
   std::vector<System> synchronised_systems;
@@ -171,60 +177,6 @@ class Engine {
                              system_state);
   }
 
-  std::unordered_set<u_int32_t>
-  intersect_stores(std::vector<std::type_index> to_intersect) {
-    std::unordered_set<u_int32_t> entities;
-    if (to_intersect.empty()) {
-      return entities;
-    }
-    for (const auto &p : data[to_intersect.back()]) {
-      entities.insert(p.first);
-    }
-    to_intersect.pop_back();
-    std::unordered_set<u_int32_t> intersected;
-    for (const auto &e : entities) {
-      bool bad = false;
-      for (const auto &i : to_intersect) {
-        if (!data[i].contains(e)) {
-          bad = true;
-          break;
-        }
-      }
-      if (!bad) {
-        intersected.insert(e);
-      }
-    }
-    return intersected;
-  }
-
-  template <class Query, class Filter, class... Args>
-  Query create_query(SystemState system_state) {
-    std::vector<std::type_index> stores;
-    (
-        [&]() {
-          if constexpr (!std::is_same_v<Args, Entity>) {
-            stores.emplace_back(typeid(Args));
-          }
-        }(),
-        ...);
-    std::vector<std::tuple<create_component_reference_t<Args>...>> components;
-    std::unordered_set<u_int32_t> entities = intersect_stores(stores);
-    entities = apply_filter<Filter>(entities, system_state);
-    for (u_int32_t e : entities) {
-      components.push_back(
-          query_tuple<create_component_reference_t<Args>...>(e, system_state));
-    }
-    Query q;
-    q.entities = std::move(components);
-    return q;
-  }
-
-  template <class Query, class First, class... Args>
-    requires(!concepts::Filter<First>)
-  Query create_query(SystemState &state) {
-    return create_query<Query, filters::Nop, First, Args...>(state);
-  }
-
   template <class T>
   T instantiate_parameter(std::type_identity<T>, SystemState &state,
                           u_int32_t parameter_id, u_int32_t system_id);
@@ -244,23 +196,39 @@ class Engine {
     return Commands(command_buffer);
   }
 
-  template <class... Args>
-  Query<Args...> &instantiate_parameter(std::type_identity<Query<Args...> &>,
-                                        SystemState &state,
-                                        u_int32_t parameter_id,
-                                        u_int32_t system_id) {
+  template <class First, class... Args>
+  Query<First, Args...> &
+  instantiate_parameter(std::type_identity<Query<First, Args...> &>,
+                        SystemState &state, u_int32_t parameter_id,
+                        u_int32_t system_id) {
     if (!queries[system_id].contains(parameter_id)) {
       query_buffers.template emplace_back(
-          QueryBuffer::from_query(std::type_identity<Query<Args...>>()));
+          QueryBuffer::from_query(std::type_identity<Query<First, Args...>>()));
+      if constexpr (concepts::Filter<First>) {
+        query_filters[system_id].emplace(
+            parameter_id,
+            [this, &state](const std::unordered_set<Entity> &entities) {
+              return apply_filter<First>(entities, state);
+            });
+      } else {
+        query_filters[system_id].emplace(
+            parameter_id,
+            [this, &state](const std::unordered_set<Entity> &entities) {
+              return apply_filter<filters::Nop>(entities, state);
+            });
+      }
       queries[system_id].emplace(
-          parameter_id, std::unique_ptr<void, void (*)(void const *)>(
-                            new Query<Args...>{.buffer = query_buffers.back(),
-                                               .system_state = state},
-                            [](void const *ptr) {
-                              delete static_cast<Query<Args...> const *>(ptr);
-                            }));
+          parameter_id,
+          std::unique_ptr<void, void (*)(void const *)>(
+              new Query<First, Args...>{
+                  .buffer = query_buffers.back(),
+                  .system_state = state,
+                  .filter = query_filters[system_id].at(parameter_id)},
+              [](void const *ptr) {
+                delete static_cast<Query<Args...> const *>(ptr);
+              }));
     }
-    return *static_cast<Query<Args...> *>(
+    return *static_cast<Query<First, Args...> *>(
         queries[system_id]
             .at(parameter_id)
             .get()); // create_query<Query<Args...>, Args...>(state);
@@ -310,7 +278,6 @@ class Engine {
           }
         }
         buff.items.emplace(entity, items);
-        std::cout << "Push" << invocation_id << std::endl;
         buff.last_changed = invocation_id;
       }
       if (buff.items.contains(entity) && !belongs) {
