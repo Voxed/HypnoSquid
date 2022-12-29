@@ -11,11 +11,11 @@ namespace core {
 template <class T> class ComponentReference {
   T *data = nullptr;
   ComponentState &component_state;
-  SystemState system_state;
+  SystemState &system_state;
 
 public:
   explicit ComponentReference(T *data, ComponentState &component_state,
-                              SystemState system_state)
+                              SystemState &system_state)
       : data(data), component_state(component_state),
         system_state(system_state) {}
   ComponentReference() = default;

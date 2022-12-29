@@ -32,9 +32,10 @@ void test(Commands commands, EntityFactory &entity_factory) {
   }
 }
 
-void test2(Query<TestData, Entity, const TestData2> query,
-           Query<TestData> query2) {
-  for (auto t : query.entities) {
+void test2(Query<TestData, Entity, const TestData2> &query,
+           Query<TestData> &query2) {
+  query2.iter();
+  for (auto t : query.iter()) {
     auto &v = get<0>(t);
     if (get<1>(t) == 52)
       v.get_mut()->a;
@@ -44,10 +45,10 @@ void test2(Query<TestData, Entity, const TestData2> query,
   }
 }
 
-void test3(Query<All<Changed<TestData>, Not<TestData3>>, TestData> q) {
-  for (auto t : q.entities) {
+void test3(Query<All<Changed<TestData>, Not<TestData3>>, TestData, Entity> &q) {
+  for (auto t : q.iter()) {
     auto c = get<0>(t);
-    std::cout << "CHANGED!" << c->a << std::endl;
+    std::cout << "CHANGED!" << c->a << ":" << get<1>(t) << std::endl;
   }
 }
 
@@ -65,6 +66,6 @@ int main() {
       // update.
       .add_synchronised_system(sleep_system)
       .run();
-  
+
   return 0;
 }
