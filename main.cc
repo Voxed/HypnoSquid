@@ -53,6 +53,16 @@ void test2(Query<TestData, Entity, const TestData2> &query,
   }
 }
 
+void test5(Query<TestData, Entity, const TestData2> &query,
+           Query<TestData> &query2) {
+  for (auto t : query.iter()) {
+    auto &v = get<0>(t);
+    if (get<1>(t) == 52)
+      v.get_mut()->a;
+    auto &v2 = get<2>(t);
+  }
+}
+
 void test3(Query<All<Changed<TestData>, Not<TestData3>>, TestData, Entity> &q) {
   // std::cout << "New" << std::endl;
   for (auto t : q.iter()) {
@@ -71,6 +81,7 @@ int main() {
   engine.add_system(test)
       .add_system(test3)
       .add_system(test2)
+      .add_system(test5)
       // Synchronised systems will run synchronised at the end of each
       // update.
       .add_synchronised_system(sleep_system)

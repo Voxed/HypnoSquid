@@ -54,6 +54,7 @@ struct QueryBufferLayoutItem {
   static QueryBufferLayoutItem
   from_query_parameter(std::type_identity<T<Arg>>,
                        ComponentRegistry &component_registry) {
+    static_assert(!std::is_const_v<Arg>);
     return QueryBufferLayoutItem{
         .type = COMPONENT,
         .data = {.component_type =
@@ -76,7 +77,8 @@ struct QueryBuffer {
             buffer.layout.push_back(QueryBufferLayoutItem{.type = ENTITY});
           } else {
             buffer.layout.push_back(QueryBufferLayoutItem::from_query_parameter(
-                std::type_identity<create_component_reference<Args>>(),
+                std::type_identity<
+                    std::remove_const_t<create_component_reference_t<Args>>>(),
                 component_registry));
           }
         }(),
