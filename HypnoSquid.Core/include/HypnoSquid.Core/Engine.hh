@@ -13,6 +13,7 @@
 #include "Query.hh"
 #include "config.hh"
 
+#include <condition_variable>
 #include <dlfcn.h>
 #include <fstream>
 #include <functional>
@@ -26,15 +27,27 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+
 namespace hs {
 namespace core {
+
+struct SystemRequirements {
+  std::unordered_set<ComponentID> const_components;
+  std::unordered_set<ComponentID> mutable_components;
+};
 
 using InvocationID =
     u_int64_t; // Needs to never run out! At 240 fps running 100000 systems, I'm counting 24372 years. Probably enough.
 
 class Engine {
-  using System = std::function<void()>;
+  using System = std::pair<SystemRequirements, std::function<void(InvocationID)>>;
   std::unordered_map<ComponentID, std::unordered_map<Entity, std::pair<ComponentState, unique_void_ptr>>> data;
+
+  std::mutex system_resource_mutex;
+  std::condition_variable system_resource_cv;
+  std::unordered_map<ComponentID, u_int32_t> const_component_reference_count;
+  std::unordered_set<ComponentID> mutable_component_references;
+
   std::unordered_map<Entity, std::unordered_set<ComponentID>> entity_components;
   std::vector<std::unique_ptr<QueryBuffer>> query_buffers;
   std::vector<System> systems;
@@ -111,7 +124,8 @@ class Engine {
     return apply_any_filters(std::type_identity<Filter>(), entities, system_state);
   }
 
-  EntityFactory &instantiate_parameter(std::type_identity<EntityFactory &>, SystemState &state) {
+  EntityFactory &instantiate_parameter(std::type_identity<EntityFactory &>, SystemState &state,
+                                       SystemRequirements &requirements) {
     return entity_factory;
   }
 
@@ -120,7 +134,7 @@ class Engine {
     return *command_queue.back().get();
   }
 
-  Commands instantiate_parameter(std::type_identity<Commands>, SystemState &state) {
+  Commands instantiate_parameter(std::type_identity<Commands>, SystemState &state, SystemRequirements &requirements) {
     return Commands(create_command_buffer(), component_registry);
   }
 
@@ -136,27 +150,43 @@ class Engine {
     return *(query_buffers.back().get());
   };
 
+  template <class Res> void calculate_system_requirement(SystemRequirements &req) {
+    if constexpr (!std::is_same_v<Entity, Res>) {
+      if constexpr (std::is_const_v<Res>) {
+        req.const_components.insert(component_registry.template get_component_id<Res>());
+      } else {
+        req.mutable_components.insert(component_registry.template get_component_id<Res>());
+      }
+    }
+  }
+
   template <class First, class... Args>
-  Query<First, Args...> instantiate_parameter(std::type_identity<Query<First, Args...>>, SystemState &state) {
-    if constexpr (concepts::Filter<First>)
+  Query<First, Args...> instantiate_parameter(std::type_identity<Query<First, Args...>>, SystemState &state,
+                                              SystemRequirements &requirements) {
+    if constexpr (concepts::Filter<First>) {
+      (calculate_system_requirement<Args>(requirements), ...);
       return Query<First, Args...>(
           retrieve_suitable_buffer<Args...>(), state, component_registry,
           [this, &state](const std::unordered_set<Entity> &entities) { return apply_filter<First>(entities, state); });
-    else
+    } else {
+      calculate_system_requirement<First>(requirements);
+      (calculate_system_requirement<Args>(requirements), ...);
       return Query<First, Args...>(retrieve_suitable_buffer<First, Args...>(), state, component_registry);
+    }
   }
 
   template <class... Parameters>
-  std::function<void()> bind_system(std::function<void(Parameters...)> system, SystemState &system_state) {
-    auto parameters =
-        std::tuple<Parameters...>(instantiate_parameter(std::type_identity<Parameters>(), system_state)...);
-    std::function<void()> func = [&, system, parameters]() {
-      system_state.invocation_id = invocation_id;
+  System bind_system(std::function<void(Parameters...)> system, SystemState &system_state) {
+    SystemRequirements requirements;
+    auto parameters = std::tuple<Parameters...>(
+        instantiate_parameter(std::type_identity<Parameters>(), system_state, requirements)...);
+    std::function<void(InvocationID)> func = [&, system, parameters](InvocationID _invocation_id) {
+      system_state.invocation_id = _invocation_id;
       [&]<std::size_t... Is>(std::index_sequence<Is...>) { system(get<Is>(parameters)...); }
       (std::make_index_sequence<sizeof...(Parameters)>{});
-      system_state.last_invocation_id = invocation_id;
+      system_state.last_invocation_id = _invocation_id;
     };
-    return func;
+    return std::make_pair(requirements, func);
   }
 
   void update_queries(Entity entity) {
@@ -232,22 +262,86 @@ class Engine {
     }
   }
 
-  void invoke_system(System system) {
-    invocation_id++;
-    system();
+  std::thread invoke_system(const System &system, u_int32_t index) {
+    return std::thread([&, index]() {
+      std::unique_lock lk(system_resource_mutex);
+
+      system_resource_cv.wait(lk, [&] {
+        // Calculate whether the system requirements can be met at this time.
+        // Mutable requirements
+        for (auto &m : system.first.mutable_components) {
+          if (mutable_component_references.contains(m) || const_component_reference_count[m] > 0) {
+            return false;
+          }
+        }
+        // Constant requirements
+        for (auto &m : system.first.const_components) {
+          if (mutable_component_references.contains(m)) {
+            return false;
+          }
+        }
+
+        return true;
+      });
+
+      // We're good! Acquire resources!
+      for (auto &m : system.first.mutable_components) {
+        mutable_component_references.insert(m);
+      }
+      for (auto &m : system.first.const_components) {
+        if (!system.first.mutable_components.contains(
+                m)) { // If we already have mutable ownership, we don't need constant ownership.
+          const_component_reference_count[m]++;
+        }
+      }
+
+      invocation_id++;
+      InvocationID inv = invocation_id;
+      lk.unlock();
+
+      invocation_id++;
+      system.second(inv);
+
+      lk.lock();
+
+      // Release resources
+      for (auto &m : system.first.mutable_components) {
+        mutable_component_references.erase(m);
+      }
+      for (auto &m : system.first.const_components) {
+        if (!system.first.mutable_components.contains(m)) {
+          const_component_reference_count[m]--;
+        }
+      }
+
+      lk.unlock();
+
+      // Notify that new resources might be available!
+      system_resource_cv.notify_all();
+    });
+  }
+
+  void invoke_system_sync(const System &system) {
+    invocation_id += 1;
+    system.second(invocation_id);
   }
 
   void invoke_systems() {
     if (invocation_id == 0) {
       for (auto &system : startup_systems) {
-        invoke_system(system);
+        invoke_system_sync(system);
       }
     } else {
+      std::vector<std::thread> threads;
+      u_int32_t i = 0;
       for (auto &system : systems) {
-        invoke_system(system);
+        threads.push_back(invoke_system(system, i++));
       }
+      system_resource_cv.notify_all(); // Notify all threads to start the battle!
+      for (auto &t : threads)
+        t.join();
       for (auto &system : synchronised_systems) {
-        invoke_system(system);
+        invoke_system_sync(system);
       }
     }
   }
