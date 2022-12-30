@@ -29,26 +29,19 @@ using create_component_reference_t =
     typename create_component_reference<T>::type;
 
 union QueryBufferItem {
-  u_int32_t entity_id;
   struct {
     void *data;
     ComponentState &state;
   } component;
 };
 
-enum QueryBufferLayoutItemType { ENTITY, COMPONENT };
+enum QueryBufferLayoutItemType { COMPONENT };
 
 struct QueryBufferLayoutItem {
   QueryBufferLayoutItemType type;
   union {
     u_int32_t component_type;
   } data;
-
-  QueryBufferLayoutItem
-  from_query_parameter(std::type_identity<u_int32_t>,
-                       ComponentRegistry &component_registry) {
-    return QueryBufferLayoutItem{.type = ENTITY};
-  };
 
   template <template <class> class T, class Arg>
   static QueryBufferLayoutItem
@@ -73,9 +66,7 @@ struct QueryBuffer {
     QueryBuffer buffer;
     (
         [&]() {
-          if constexpr (std::is_same_v<Args, u_int32_t>) {
-            buffer.layout.push_back(QueryBufferLayoutItem{.type = ENTITY});
-          } else {
+          if constexpr (!std::is_same_v<Args, u_int32_t>) {
             buffer.layout.push_back(QueryBufferLayoutItem::from_query_parameter(
                 std::type_identity<
                     std::remove_const_t<create_component_reference_t<Args>>>(),
@@ -94,27 +85,82 @@ struct QueryBuffer {
   }
 };
 
+/*
+ * A mapping between query buffer indices to query indices.
+ * Facilitates query buffer reuse between multiple similar queries.
+ */
+struct QueryBufferMapping {
+  std::unordered_map<size_t, size_t> mapping;
+
+  template <class... Components>
+  static QueryBufferMapping from(QueryBuffer &buffer,
+                                 ComponentRegistry &component_registry) {
+    QueryBufferMapping mapping;
+    int idx = 0;
+    (
+        [&]() {
+          if constexpr (std::is_same_v<u_int32_t, Components>) {
+            mapping.mapping[idx++] = -1;
+          } else {
+            int layout_idx = 0;
+            for (auto &layout_item : buffer.layout) {
+              bool done = false;
+              switch (layout_item.type) {
+              case COMPONENT:
+                if (component_registry
+                        .template get_component_id<Components>() ==
+                    layout_item.data.component_type) {
+                  mapping.mapping[idx++] = layout_idx;
+                  done = true;
+                }
+              }
+              if (done)
+                break;
+              layout_idx += 1;
+            }
+          }
+        }(),
+        ...);
+
+    for (auto &p : mapping.mapping) {
+      std::cout << p.first << "->" << p.second << std::endl;
+    }
+
+    return mapping;
+  }
+
+  [[nodiscard]] size_t map(size_t i) const { return mapping.at(i); }
+};
+
 template <class... Components> class QueryBase {
 protected:
   QueryBuffer &buffer;
+  QueryBufferMapping buffer_mapping;
   SystemState &system_state;
   u_int64_t last_updated = 0;
   std::unordered_map<u_int32_t,
                      std::tuple<create_component_reference_t<Components>...>>
       entities;
 
-  QueryBase(QueryBuffer &buffer, SystemState &system_state)
-      : buffer(buffer), system_state(system_state) {}
+  QueryBase(QueryBuffer &buffer, SystemState &system_state,
+            ComponentRegistry &component_registry)
+      : buffer(buffer), system_state(system_state) {
+    buffer_mapping =
+        QueryBufferMapping::from<std::remove_const_t<Components>...>(
+            buffer, component_registry);
+  }
 
-  u_int32_t create(std::type_identity<u_int32_t>, const QueryBufferItem &item) {
-    return item.entity_id;
+  u_int32_t create(std::type_identity<u_int32_t>, size_t, u_int32_t entity_id,
+                   const std::vector<QueryBufferItem> &) {
+    return entity_id;
   }
 
   template <template <class> class T, class Arg>
     requires concepts::ComponentReference<T<Arg>>
-  T<Arg> create(std::type_identity<T<Arg>>, const QueryBufferItem &item) {
-    return T(static_cast<Arg *>(item.component.data), item.component.state,
-             system_state);
+  T<Arg> create(std::type_identity<T<Arg>>, size_t buffer_index, u_int32_t,
+                const std::vector<QueryBufferItem> &b) {
+    return T(static_cast<Arg *>(b.at(buffer_index).component.data),
+             b.at(buffer_index).component.state, system_state);
   }
 
   void update() {
@@ -126,7 +172,8 @@ protected:
                          std::move(std::make_tuple(create(
                              std::type_identity<std::remove_const_t<
                                  create_component_reference_t<Components>>>(),
-                             p.second.at(([&]() { return idx++; }())))...)));
+                             buffer_mapping.map([&]() { return idx++; }()),
+                             p.first, p.second)...)));
       }
     }
   }
@@ -134,8 +181,9 @@ protected:
 
 template <class... Components> class Query : QueryBase<Components...> {
 public:
-  Query(QueryBuffer &buffer, SystemState &system_state)
-      : QueryBase<Components...>(buffer, system_state) {}
+  Query(QueryBuffer &buffer, SystemState &system_state,
+        ComponentRegistry &component_registry)
+      : QueryBase<Components...>(buffer, system_state, component_registry) {}
 
   std::vector<std::tuple<create_component_reference_t<Components>...>> iter() {
     this->update();
@@ -159,11 +207,13 @@ class Query<Filter, Components...> : QueryBase<Components...> {
 
 public:
   Query(QueryBuffer &buffer, SystemState &system_state,
+        ComponentRegistry &component_registry,
         std::function<
             std::unordered_set<u_int32_t>(std::unordered_set<u_int32_t>)>
             filter)
-      : filter(std::move(filter)), QueryBase<Components...>(buffer,
-                                                            system_state) {}
+      : filter(std::move(filter)), QueryBase<Components...>(
+                                       buffer, system_state,
+                                       component_registry) {}
 
   std::vector<std::tuple<create_component_reference_t<Components>...>> iter() {
     this->update();

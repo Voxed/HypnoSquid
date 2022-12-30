@@ -57,17 +57,17 @@ void test5(Query<TestData, Entity, const TestData2> &query,
            Query<TestData> &query2) {
   for (auto t : query.iter()) {
     auto &v = get<0>(t);
-    if (get<1>(t) == 52)
+    if (get<1>(t) == 51)
       v.get_mut()->a;
     auto &v2 = get<2>(t);
   }
 }
 
 void test3(Query<All<Changed<TestData>, Not<TestData3>>, TestData, Entity> &q) {
-  // std::cout << "New" << std::endl;
+  std::cout << "New" << std::endl;
   for (auto t : q.iter()) {
     auto c = get<0>(t);
-    // std::cout << "CHANGED!" << c->a << ":" << get<1>(t) << std::endl;
+    std::cout << "CHANGED!" << c->a << ":" << get<1>(t) << std::endl;
   }
 }
 

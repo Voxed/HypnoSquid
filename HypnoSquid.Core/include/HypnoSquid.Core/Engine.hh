@@ -183,7 +183,7 @@ class Engine {
             parameter_id,
             std::unique_ptr<void, void (*)(void const *)>(
                 new Query<First, Args...>(
-                    *(query_buffers.back().get()), state,
+                    *(query_buffers.back().get()), state, component_registry,
                     [this, &state](const std::unordered_set<Entity> &entities) {
                       return apply_filter<First>(entities, state);
                     }),
@@ -194,7 +194,8 @@ class Engine {
         queries[system_id].emplace(
             parameter_id,
             std::unique_ptr<void, void (*)(void const *)>(
-                new Query<First, Args...>(*(query_buffers.back().get()), state),
+                new Query<First, Args...>(*(query_buffers.back().get()), state,
+                                          component_registry),
                 [](void const *ptr) {
                   delete static_cast<Query<Args...> const *>(ptr);
                 }));
@@ -239,9 +240,6 @@ class Engine {
         std::vector<QueryBufferItem> items;
         for (auto &l : buff->layout) {
           switch (l.type) {
-          case ENTITY:
-            items.push_back(QueryBufferItem{.entity_id = entity});
-            break;
           case COMPONENT: {
             auto &pair = data[l.data.component_type].at(entity);
             items.push_back(
