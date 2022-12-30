@@ -29,23 +29,20 @@
 namespace hs {
 namespace core {
 
-using SystemID = u_int32_t;
-using ParameterID = u_int32_t;
 using InvocationID =
     u_int64_t; // Needs to never run out! At 240 fps running 100000 systems, I'm counting 24372 years. Probably enough.
 
 class Engine {
-  using System = std::pair<SystemState, std::function<void(SystemState &)>>;
+  using System = std::function<void()>;
   std::unordered_map<ComponentID, std::unordered_map<Entity, std::pair<ComponentState, unique_void_ptr>>> data;
   std::unordered_map<Entity, std::unordered_set<ComponentID>> entity_components;
-  std::unordered_map<SystemID, std::unordered_map<ParameterID, unique_void_ptr>> queries;
   std::vector<std::unique_ptr<QueryBuffer>> query_buffers;
   std::vector<System> systems;
   std::vector<System> synchronised_systems;
   std::vector<System> startup_systems;
-  std::vector<CommandBuffer> command_queue;
+  std::vector<std::unique_ptr<SystemState>> system_states;
+  std::vector<std::unique_ptr<CommandBuffer>> command_queue;
 
-  SystemID next_system_id = 0;
   InvocationID invocation_id = 0;
 
   EntityFactory entity_factory;
@@ -114,43 +111,40 @@ class Engine {
     return apply_any_filters(std::type_identity<Filter>(), entities, system_state);
   }
 
-  EntityFactory &instantiate_parameter(std::type_identity<EntityFactory &>, SystemState &state, ParameterID, SystemID) {
+  EntityFactory &instantiate_parameter(std::type_identity<EntityFactory &>, SystemState &state) {
     return entity_factory;
   }
 
-  Commands instantiate_parameter(std::type_identity<Commands>, SystemState &state, ParameterID, SystemID) {
-    CommandBuffer &command_buffer = command_queue.emplace_back();
-    return Commands(command_buffer, component_registry);
+  CommandBuffer &create_command_buffer() {
+    command_queue.emplace_back(std::make_unique<CommandBuffer>());
+    return *command_queue.back().get();
+  }
+
+  Commands instantiate_parameter(std::type_identity<Commands>, SystemState &state) {
+    return Commands(create_command_buffer(), component_registry);
   }
 
   template <class First, class... Args>
-  Query<First, Args...> &instantiate_parameter(std::type_identity<Query<First, Args...> &>, SystemState &state,
-                                               ParameterID parameter_id, SystemID system_id) {
-    if (!queries[system_id].contains(parameter_id)) {
-      query_buffers.emplace_back(std::unique_ptr<QueryBuffer>(
-          new QueryBuffer(QueryBuffer::from_query(std::type_identity<Query<First, Args...>>(), component_registry))));
-      if constexpr (concepts::Filter<First>)
-        queries[system_id].emplace(parameter_id, make_unique_void(new Query<First, Args...>(
-                                                     *(query_buffers.back().get()), state, component_registry,
-                                                     [this, &state](const std::unordered_set<Entity> &entities) {
-                                                       return apply_filter<First>(entities, state);
-                                                     })));
-      else
-        queries[system_id].emplace(parameter_id, make_unique_void(new Query<First, Args...>(
-                                                     *(query_buffers.back().get()), state, component_registry)));
-    }
-    return *static_cast<Query<First, Args...> *>(
-        queries[system_id].at(parameter_id).get()); // create_query<Query<Args...>, Args...>(state);
+  Query<First, Args...> instantiate_parameter(std::type_identity<Query<First, Args...>>, SystemState &state) {
+    query_buffers.emplace_back(std::unique_ptr<QueryBuffer>(
+        new QueryBuffer(QueryBuffer::from_query(std::type_identity<Query<First, Args...>>(), component_registry))));
+    if constexpr (concepts::Filter<First>)
+      return Query<First, Args...>(
+          *(query_buffers.back().get()), state, component_registry,
+          [this, &state](const std::unordered_set<Entity> &entities) { return apply_filter<First>(entities, state); });
+    else
+      return Query<First, Args...>(*(query_buffers.back().get()), state, component_registry);
   }
 
   template <class... Parameters>
-  std::function<void(SystemState &)> bind_system(std::function<void(SystemState &, Parameters...)> system) {
-    SystemID system_id = next_system_id++;
-    std::function<void(SystemState &)> func = [&, system_id, system](SystemState &state) {
-      int i = 0;
-      system(state, instantiate_parameter(
-                        std::type_identity<Parameters>(), state,
-                        [&]() { return i++; }() /* Really stupid patch for sequenced modifications */, system_id)...);
+  std::function<void()> bind_system(std::function<void(Parameters...)> system, SystemState &system_state) {
+    auto parameters =
+        std::tuple<Parameters...>(instantiate_parameter(std::type_identity<Parameters>(), system_state)...);
+    std::function<void()> func = [&, system, parameters]() {
+      system_state.invocation_id = invocation_id;
+      [&]<std::size_t... Is>(std::index_sequence<Is...>) { system(get<Is>(parameters)...); }
+      (std::make_index_sequence<sizeof...(Parameters)>{});
+      system_state.last_invocation_id = invocation_id;
     };
     return func;
   }
@@ -205,8 +199,8 @@ class Engine {
   }
 
   void process_commands() {
-    for (auto &command_buffer : command_queue)
-      for (auto &command : command_buffer.commands)
+    for (auto &command_buffer : command_queue) {
+      for (auto &command : command_buffer->commands) {
         switch (command.type) {
         case ADD: {
           auto &action = command.action.add;
@@ -223,27 +217,28 @@ class Engine {
           running = false;
           break;
         }
-    command_queue.clear();
+      }
+      command_buffer->commands.clear();
+    }
   }
 
-  void invoke_system(SystemState &state, std::function<void(SystemState &)> system) {
+  void invoke_system(System system) {
     invocation_id++;
-    state.invocation_id = invocation_id;
-    system(state);
-    state.last_invocation_id = invocation_id;
+    system();
   }
 
   void invoke_systems() {
     if (invocation_id == 0) {
       for (auto &system : startup_systems) {
-        invoke_system(system.first, system.second);
+        invoke_system(system);
       }
-    }
-    for (auto &system : systems) {
-      invoke_system(system.first, system.second);
-    }
-    for (auto &system : synchronised_systems) {
-      invoke_system(system.first, system.second);
+    } else {
+      for (auto &system : systems) {
+        invoke_system(system);
+      }
+      for (auto &system : synchronised_systems) {
+        invoke_system(system);
+      }
     }
   }
 
@@ -263,13 +258,16 @@ class Engine {
     init_plugin(*this);
   }
 
-  template <class... Parameters>
-  std::pair<SystemState, std::function<void(SystemState &)>> create_system(std::function<void(Parameters...)> system) {
-    return std::make_pair(SystemState{.last_invocation_id = 0, .invocation_id = 0},
-                          bind_system(std::function<void(SystemState &, Parameters...)>(
-                              [&, system](SystemState &, Parameters... params) -> void {
-                                system(std::forward<Parameters>(params)...);
-                              })));
+  SystemState &create_system_state() {
+    system_states.push_back(std::make_unique<SystemState>(SystemState{.last_invocation_id = 0, .invocation_id = 0}));
+    return *system_states.back().get();
+  }
+
+  template <class... Parameters> System create_system(std::function<void(Parameters...)> system) {
+    SystemState &state = create_system_state();
+    return bind_system(std::function<void(Parameters...)>(
+                           [&, system](Parameters... params) -> void { system(std::forward<Parameters>(params)...); }),
+                       state);
   }
 
 public:
@@ -320,6 +318,7 @@ public:
   void run() {
     while (running) {
       invoke_systems();
+      std::cout << "Processing commands" << std::endl;
       process_commands();
 // #define PRINT_MEMORY
 #ifdef PRINT_MEMORY
