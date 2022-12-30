@@ -36,29 +36,23 @@ class Commands {
   ComponentRegistry &component_registry;
 
 public:
-  explicit Commands(CommandBuffer &buffer,
-                    ComponentRegistry &component_registry)
+  explicit Commands(CommandBuffer &buffer, ComponentRegistry &component_registry)
       : buffer(buffer), component_registry(component_registry) {}
 
   template <typename T> void add_component(u_int32_t entity_id, T data = T()) {
     Command cmd = {
         .type = ADD,
-        .action = {
-            .add = {.entity_id = entity_id,
-                    .component_type = component_registry.get_component_id<T>(),
-                    .component_data = new T(data),
-                    .component_destructor = [](void const *ptr) {
-                      delete static_cast<T const *>(ptr);
-                    }}}};
+        .action = {.add = {.entity_id = entity_id,
+                           .component_type = component_registry.get_component_id<T>(),
+                           .component_data = new T(data),
+                           .component_destructor = [](void const *ptr) { delete static_cast<T const *>(ptr); }}}};
     buffer.commands.push_back(cmd);
   }
 
   template <typename T> void remove_component(u_int32_t entity_id) {
     Command cmd = {
         .type = REMOVE,
-        .action = {.remove = {.entity_id = entity_id,
-                              .component_type =
-                                  component_registry.get_component_id<T>()}}};
+        .action = {.remove = {.entity_id = entity_id, .component_type = component_registry.get_component_id<T>()}}};
     buffer.commands.push_back(cmd);
   }
 };

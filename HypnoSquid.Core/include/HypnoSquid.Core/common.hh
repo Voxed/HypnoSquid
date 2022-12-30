@@ -6,13 +6,9 @@
 namespace hs {
 namespace core {
 
-template <class T> void simple_deleter(void const *ptr) {
-  delete static_cast<T const *>(ptr);
-}
+template <class T> void simple_deleter(void const *ptr) { delete static_cast<T const *>(ptr); }
 
-template <class T>
-constexpr std::unique_ptr<void, void (*)(void const *)>
-make_unique_void(T *ptr) {
+template <class T> constexpr std::unique_ptr<void, void (*)(void const *)> make_unique_void(T *ptr) {
   return std::unique_ptr<void, void (*)(void const *)>(ptr, simple_deleter<T>);
 }
 
@@ -27,11 +23,9 @@ namespace {
 template <template <typename...> typename, template <typename...> typename>
 struct specialization_of_impl_s : std::false_type {};
 
-template <template <typename...> typename T>
-struct specialization_of_impl_s<T, T> : std::true_type {};
+template <template <typename...> typename T> struct specialization_of_impl_s<T, T> : std::true_type {};
 
-template <template <class...> class U, template <class...> class T,
-          class... Args>
+template <template <class...> class U, template <class...> class T, class... Args>
 constexpr bool specialization_of_impl(std::type_identity<T<Args...>>) {
   return specialization_of_impl_s<T, U>::value;
 }
@@ -39,8 +33,7 @@ constexpr bool specialization_of_impl(std::type_identity<T<Args...>>) {
 } // namespace
 
 template <template <class...> class U, class T>
-concept specialization_of =
-    specialization_of_impl<U>(std::type_identity<std::remove_const_t<T>>());
+concept specialization_of = specialization_of_impl<U>(std::type_identity<std::remove_const_t<T>>());
 
 } // namespace concepts
 

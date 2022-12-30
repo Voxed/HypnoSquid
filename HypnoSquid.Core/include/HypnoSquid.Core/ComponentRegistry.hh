@@ -26,17 +26,13 @@ public:
       std::string cid = Component::ID.get_id();
       if (component_ids.contains(cid)) {
         id = component_ids[cid];
-        std::cout << "Component with cid " << cid << " aka. "
-                  << typeid(Component).name() << " with hash "
-                  << typeid(Component).hash_code() << " fetched to id " << id
-                  << "." << std::endl;
+        std::cout << "Component with cid " << cid << " aka. " << typeid(Component).name() << " with hash "
+                  << typeid(Component).hash_code() << " fetched to id " << id << "." << std::endl;
       } else {
         id = next_component_id++;
         component_ids[cid] = id;
-        std::cout << "Component with cid " << cid << " aka. "
-                  << typeid(Component).name() << " with hash "
-                  << typeid(Component).hash_code() << " registered to id " << id
-                  << "." << std::endl;
+        std::cout << "Component with cid " << cid << " aka. " << typeid(Component).name() << " with hash "
+                  << typeid(Component).hash_code() << " registered to id " << id << "." << std::endl;
       }
     }
     return id;
