@@ -89,9 +89,8 @@ class Engine {
   std::unordered_set<Entity> apply_filter(const std::unordered_set<Entity> &entities, SystemState system_state) {
     std::unordered_set<Entity> filtered;
     for (const Entity &e : entities)
-      if (data.at(component_registry.template get_component_id<typename Filter::component_type>())
-              .at(e)
-              .first.has_changed(system_state))
+      if (data[component_registry.template get_component_id<typename Filter::component_type>()].at(e).first.has_changed(
+              system_state))
         filtered.insert(e);
     return filtered;
   }
@@ -100,7 +99,7 @@ class Engine {
   std::unordered_set<Entity> apply_filter(const std::unordered_set<Entity> &entities, SystemState system_state) {
     std::unordered_set<Entity> filtered;
     for (const Entity &e : entities)
-      if (!data.at(component_registry.template get_component_id<typename Filter::component_type>()).contains(e))
+      if (!data[component_registry.template get_component_id<typename Filter::component_type>()].contains(e))
         filtered.insert(e);
     return filtered;
   }
@@ -186,16 +185,23 @@ class Engine {
 
   void add_component(Entity entity, ComponentID component_type,
                      std::unique_ptr<void, void (*)(void const *)> &component_data) {
-    data[component_type].emplace(
-        entity, std::make_pair(ComponentState{.last_changed = invocation_id}, std::move(component_data)));
-    entity_components[entity].insert(component_type);
-    update_queries(entity);
+    if (!entity_components[entity].contains(component_type)) {
+      data[component_type].emplace(
+          entity, std::make_pair(ComponentState{.last_changed = invocation_id}, std::move(component_data)));
+      entity_components[entity].insert(component_type);
+      update_queries(entity);
+    }
   }
 
   void remove_component(Entity entity, ComponentID component_type) {
-    data[component_type].erase(entity);
-    entity_components[entity].erase(component_type);
-    update_queries(entity);
+    if (entity_components[entity].contains(component_type)) {
+      data[component_type].erase(entity);
+      entity_components[entity].erase(component_type);
+      update_queries(entity);
+      if (entity_components[entity].empty()) {
+        entity_components.erase(entity);
+      }
+    }
   }
 
   void process_commands() {
@@ -315,6 +321,19 @@ public:
     while (running) {
       invoke_systems();
       process_commands();
+// #define PRINT_MEMORY
+#ifdef PRINT_MEMORY
+      size_t total_size_components = 0;
+      for (auto &p : data) {
+        total_size_components += p.second.size();
+      }
+      size_t total_size_entities = 0;
+      for (auto &p : entity_components) {
+        total_size_entities += p.second.size();
+      }
+      std::cout << data.size() << ", " << total_size_components << ", " << entity_components.size() << ", "
+                << total_size_entities << std::endl;
+#endif
     }
   }
 };

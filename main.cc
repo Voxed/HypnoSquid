@@ -31,7 +31,7 @@ void test(Commands commands, EntityFactory &entity_factory) {
   for (u_int32_t i = 0; i < 50; i++) {
     u_int32_t e = entity_factory.create_entity();
     commands.add_component<TestData>(e, {.a = i});
-    if (i == 0 || i == 1) {
+    /*if (i == 0 || i == 1) {
       commands.add_component<TestData2>(e);
       commands.add_component<TestPluginC>(e);
       if (i == 1) {
@@ -39,7 +39,7 @@ void test(Commands commands, EntityFactory &entity_factory) {
       }
     } else {
       commands.add_component<TestData3>(e);
-    }
+    }*/
   }
 }
 
@@ -62,14 +62,14 @@ void test5(Query<TestData, Entity, const TestData2> &query, Query<TestData> &que
 }
 
 void test3(Query<All<Changed<TestData>, Not<TestData3>>, TestData, Entity> &q, Commands cmd) {
-  std::cout << "New" << std::endl;
   for (auto t : q.iter()) {
     auto c = get<0>(t);
     if (get<1>(t) > 6500) {
-      std::cout << "Exiting gracefully :)" << std::endl;
-      cmd.exit();
+      // std::cout << "Exiting gracefully :)" << std::endl;
+      //  cmd.exit();
     }
-    std::cout << "CHANGED!" << c->a << ":" << get<1>(t) << std::endl;
+    cmd.remove_component<TestData>(get<1>(t));
+    // std::cout << "CHANGED!" << c->a << ":" << get<1>(t) << std::endl;
   }
 }
 
