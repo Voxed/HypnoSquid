@@ -155,10 +155,6 @@ class Engine {
                              system_state);
   }
 
-  template <class T>
-  T instantiate_parameter(std::type_identity<T>, SystemState &state,
-                          u_int32_t parameter_id, u_int32_t system_id);
-
   EntityFactory &instantiate_parameter(std::type_identity<EntityFactory &>,
                                        SystemState &state,
                                        u_int32_t parameter_id,

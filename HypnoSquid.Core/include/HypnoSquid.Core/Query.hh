@@ -43,10 +43,6 @@ struct QueryBufferLayoutItem {
   union {
     u_int32_t component_type;
   } data;
-  template <class T>
-  static QueryBufferLayoutItem
-  from_query_parameter(std::type_identity<T>,
-                       ComponentRegistry &component_registry);
 
   QueryBufferLayoutItem
   from_query_parameter(std::type_identity<u_int32_t>,
@@ -107,9 +103,6 @@ protected:
 
   QueryBase(QueryBuffer &buffer, SystemState &system_state)
       : buffer(buffer), system_state(system_state) {}
-
-  template <class T>
-  T create(std::type_identity<T>, const QueryBufferItem &item);
 
   u_int32_t create(std::type_identity<u_int32_t>, const QueryBufferItem &item) {
     return item.entity_id;

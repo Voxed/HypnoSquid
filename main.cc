@@ -18,13 +18,13 @@ struct TestData {
 };
 
 struct TestData2 {
-  static constexpr CID ID = {MainPlugin, "TestData"};
+  static constexpr CID ID = {MainPlugin, "TestData2"};
 
   u_int32_t b;
 };
 
 struct TestData3 {
-  static constexpr CID ID = {MainPlugin, "TestData"};
+  static constexpr CID ID = {MainPlugin, "TestData3"};
 };
 
 void test(Commands commands, EntityFactory &entity_factory) {
