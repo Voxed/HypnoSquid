@@ -6,6 +6,7 @@
 #pragma once
 
 #include "Commands.hh"
+#include "ComponentRegistry.hh"
 #include "ComponentState.hh"
 #include "Filter.hh"
 #include "Query.hh"
@@ -47,13 +48,13 @@ class Engine {
   using System = std::pair<SystemState, std::function<void(SystemState &)>>;
 
   std::unordered_map<
-      std::type_index,
+      u_int32_t,
       std::unordered_map<
           u_int32_t, std::pair<ComponentState,
                                std::unique_ptr<void, void (*)(void const *)>>>>
       data;
 
-  std::unordered_map<u_int32_t, std::unordered_set<std::type_index>>
+  std::unordered_map<u_int32_t, std::unordered_set<u_int32_t>>
       entity_components;
 
   u_int32_t next_system_id = 0;
@@ -69,6 +70,8 @@ class Engine {
   std::vector<System> startup_systems;
   std::vector<CommandBuffer> command_queue;
   EntityFactory entity_factory;
+
+  ComponentRegistry component_registry;
 
   template <concepts::Filter... Filters>
   std::unordered_set<Entity>
@@ -115,7 +118,8 @@ class Engine {
                SystemState system_state) {
     std::unordered_set<Entity> filtered;
     for (const Entity &e : entities)
-      if (data.at(typeid(typename Filter::component_type))
+      if (data.at(component_registry.template get_component_id<
+                      typename Filter::component_type>())
               .at(e)
               .first.has_changed(system_state))
         filtered.insert(e);
@@ -128,7 +132,9 @@ class Engine {
                SystemState system_state) {
     std::unordered_set<Entity> filtered;
     for (const Entity &e : entities)
-      if (!data.at(typeid(typename Filter::component_type)).contains(e))
+      if (!data.at(component_registry.template get_component_id<
+                       typename Filter::component_type>())
+               .contains(e))
         filtered.insert(e);
     return filtered;
   }
@@ -153,19 +159,18 @@ class Engine {
   T instantiate_parameter(std::type_identity<T>, SystemState &state,
                           u_int32_t parameter_id, u_int32_t system_id);
 
-  template <>
-  EntityFactory &
-  instantiate_parameter(std::type_identity<EntityFactory &>, SystemState &state,
-                        u_int32_t parameter_id, u_int32_t system_id) {
+  EntityFactory &instantiate_parameter(std::type_identity<EntityFactory &>,
+                                       SystemState &state,
+                                       u_int32_t parameter_id,
+                                       u_int32_t system_id) {
     return entity_factory;
   }
 
-  template <>
   Commands instantiate_parameter(std::type_identity<Commands>,
                                  SystemState &state, u_int32_t parameter_id,
                                  u_int32_t system_id) {
     CommandBuffer &command_buffer = command_queue.emplace_back();
-    return Commands(command_buffer);
+    return Commands(command_buffer, component_registry);
   }
 
   template <class First, class... Args>
@@ -174,11 +179,9 @@ class Engine {
                         SystemState &state, u_int32_t parameter_id,
                         u_int32_t system_id) {
     if (!queries[system_id].contains(parameter_id)) {
-      std::cout << parameter_id << "," << system_id << std::endl;
-      query_buffers.emplace_back(
-          std::unique_ptr<QueryBuffer>(new QueryBuffer(QueryBuffer::from_query(
-              std::type_identity<Query<First, Args...>>()))));
-      std::cout << query_buffers.size() << std::endl;
+      query_buffers.emplace_back(std::unique_ptr<QueryBuffer>(new QueryBuffer(
+          QueryBuffer::from_query(std::type_identity<Query<First, Args...>>(),
+                                  component_registry))));
       if constexpr (concepts::Filter<First>) {
         queries[system_id].emplace(
             parameter_id,
@@ -262,7 +265,7 @@ class Engine {
   }
 
   void
-  add_component(u_int32_t entity, std::type_index component_type,
+  add_component(u_int32_t entity, u_int32_t component_type,
                 std::unique_ptr<void, void (*)(void const *)> &component_data) {
     data[component_type].emplace(
         entity,
@@ -274,7 +277,7 @@ class Engine {
     update_queries(entity);
   }
 
-  void remove_component(u_int32_t entity, std::type_index component_type) {
+  void remove_component(u_int32_t entity, u_int32_t component_type) {
     data[component_type].erase(entity);
 
     entity_components[entity].erase(component_type);

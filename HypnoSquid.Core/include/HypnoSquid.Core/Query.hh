@@ -7,6 +7,7 @@
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 
 namespace hs {
 namespace core {
@@ -40,23 +41,27 @@ enum QueryBufferLayoutItemType { ENTITY, COMPONENT };
 struct QueryBufferLayoutItem {
   QueryBufferLayoutItemType type;
   union {
-    u_int32_t nothing; // TODO: Remove when getting rid of typeindex
-    std::type_index component_type;
+    u_int32_t component_type;
   } data;
   template <class T>
-  static QueryBufferLayoutItem from_query_parameter(std::type_identity<T>);
+  static QueryBufferLayoutItem
+  from_query_parameter(std::type_identity<T>,
+                       ComponentRegistry &component_registry);
 
-  template <>
   QueryBufferLayoutItem
-  from_query_parameter<u_int32_t>(std::type_identity<u_int32_t>) {
+  from_query_parameter(std::type_identity<u_int32_t>,
+                       ComponentRegistry &component_registry) {
     return QueryBufferLayoutItem{.type = ENTITY};
   };
 
   template <template <class> class T, class Arg>
   static QueryBufferLayoutItem
-  from_query_parameter(std::type_identity<T<Arg>>) {
-    return QueryBufferLayoutItem{.type = COMPONENT,
-                                 .data = {.component_type = typeid(Arg)}};
+  from_query_parameter(std::type_identity<T<Arg>>,
+                       ComponentRegistry &component_registry) {
+    return QueryBufferLayoutItem{
+        .type = COMPONENT,
+        .data = {.component_type =
+                     component_registry.template get_component_id<Arg>()}};
   }
 };
 
@@ -66,7 +71,8 @@ struct QueryBuffer {
   u_int64_t last_changed = 0;
 
   template <template <class...> class Query, class... Args>
-  static QueryBuffer from_query(std::type_identity<Query<Args...>>) {
+  static QueryBuffer from_query(std::type_identity<Query<Args...>>,
+                                ComponentRegistry &component_registry) {
     QueryBuffer buffer;
     (
         [&]() {
@@ -74,7 +80,8 @@ struct QueryBuffer {
             buffer.layout.push_back(QueryBufferLayoutItem{.type = ENTITY});
           } else {
             buffer.layout.push_back(QueryBufferLayoutItem::from_query_parameter(
-                std::type_identity<create_component_reference<Args>>()));
+                std::type_identity<create_component_reference<Args>>(),
+                component_registry));
           }
         }(),
         ...);
@@ -83,8 +90,9 @@ struct QueryBuffer {
 
   template <template <class...> class Query, concepts::Filter Filter,
             class... Args>
-  static QueryBuffer from_query(std::type_identity<Query<Filter, Args...>>) {
-    return from_query(std::type_identity<Query<Args...>>());
+  static QueryBuffer from_query(std::type_identity<Query<Filter, Args...>>,
+                                ComponentRegistry &component_registry) {
+    return from_query(std::type_identity<Query<Args...>>(), component_registry);
   }
 };
 
@@ -97,16 +105,13 @@ protected:
                      std::tuple<create_component_reference_t<Components>...>>
       entities;
 
-public:
   QueryBase(QueryBuffer &buffer, SystemState &system_state)
       : buffer(buffer), system_state(system_state) {}
 
   template <class T>
   T create(std::type_identity<T>, const QueryBufferItem &item);
 
-  template <>
-  u_int32_t create<u_int32_t>(std::type_identity<u_int32_t>,
-                              const QueryBufferItem &item) {
+  u_int32_t create(std::type_identity<u_int32_t>, const QueryBufferItem &item) {
     return item.entity_id;
   }
 
@@ -118,27 +123,27 @@ public:
   }
 
   void update() {
-    entities.clear();
-    for (auto &p : buffer.items) {
-      int idx = 0;
-      entities.emplace(
-          p.first, std::move(std::make_tuple(
-                       create(std::type_identity<std::remove_const_t<
-                                  create_component_reference_t<Components>>>(),
-                              p.second.at(([&]() { return idx++; }())))...)));
+    if (this->last_updated <= this->buffer.last_changed) {
+      entities.clear();
+      for (auto &p : buffer.items) {
+        int idx = 0;
+        entities.emplace(p.first,
+                         std::move(std::make_tuple(create(
+                             std::type_identity<std::remove_const_t<
+                                 create_component_reference_t<Components>>>(),
+                             p.second.at(([&]() { return idx++; }())))...)));
+      }
     }
   }
 };
 
-template <class... Components> struct Query : public QueryBase<Components...> {
+template <class... Components> class Query : QueryBase<Components...> {
+public:
   Query(QueryBuffer &buffer, SystemState &system_state)
       : QueryBase<Components...>(buffer, system_state) {}
 
   std::vector<std::tuple<create_component_reference_t<Components>...>> iter() {
-    if (this->last_updated <= this->buffer.last_changed) {
-      this->update();
-      this->last_updated = this->system_state.invocation_id;
-    }
+    this->update();
 
     std::vector<std::tuple<create_component_reference_t<Components>...>> e;
     for (auto &p : this->entities) {
@@ -151,23 +156,22 @@ template <class... Components> struct Query : public QueryBase<Components...> {
 
 // Annoying code duplication
 template <concepts::Filter Filter, class... Components>
-struct Query<Filter, Components...> : public QueryBase<Components...> {
+class Query<Filter, Components...> : QueryBase<Components...> {
   u_int64_t last_filtered = 0;
   std::function<std::unordered_set<u_int32_t>(std::unordered_set<u_int32_t>)>
       filter;
   std::vector<std::tuple<create_component_reference_t<Components>...>> filtered;
 
+public:
   Query(QueryBuffer &buffer, SystemState &system_state,
         std::function<
             std::unordered_set<u_int32_t>(std::unordered_set<u_int32_t>)>
             filter)
-      : filter(filter), QueryBase<Components...>(buffer, system_state) {}
+      : filter(std::move(filter)), QueryBase<Components...>(buffer,
+                                                            system_state) {}
 
   std::vector<std::tuple<create_component_reference_t<Components>...>> iter() {
-    if (this->last_updated <= this->buffer.last_changed) {
-      this->update();
-      this->last_updated = this->system_state.invocation_id;
-    }
+    this->update();
 
     if (last_filtered <= this->system_state.invocation_id) {
       std::unordered_set<u_int32_t> e;

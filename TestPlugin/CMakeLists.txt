@@ -1,3 +1,4 @@
+
 add_library(TestPlugin SHARED src/TestPlugin.cc)
 target_include_directories(TestPlugin PUBLIC include)
 

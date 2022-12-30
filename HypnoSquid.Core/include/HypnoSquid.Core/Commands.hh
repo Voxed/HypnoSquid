@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ComponentRegistry.hh"
 #include <cstdlib>
 #include <type_traits>
 #include <typeindex>
@@ -15,13 +16,13 @@ struct Command {
   union {
     struct {
       u_int32_t entity_id;
-      std::type_index component_type;
+      u_int32_t component_type;
       void *component_data;
       void (*component_destructor)(void const *);
     } add;
     struct {
       u_int32_t entity_id;
-      std::type_index component_type;
+      u_int32_t component_type;
     } remove;
   } action;
 };
@@ -32,26 +33,32 @@ struct CommandBuffer {
 
 class Commands {
   CommandBuffer &buffer;
+  ComponentRegistry &component_registry;
 
 public:
-  explicit Commands(CommandBuffer &buffer) : buffer(buffer) {}
+  explicit Commands(CommandBuffer &buffer,
+                    ComponentRegistry &component_registry)
+      : buffer(buffer), component_registry(component_registry) {}
 
   template <typename T> void add_component(u_int32_t entity_id, T data = T()) {
     Command cmd = {
         .type = ADD,
-        .action = {.add = {.entity_id = entity_id,
-                           .component_type = typeid(T),
-                           .component_data = new T(data),
-                           .component_destructor = [](void const *ptr) {
-                             delete static_cast<T const *>(ptr);
-                           }}}};
+        .action = {
+            .add = {.entity_id = entity_id,
+                    .component_type = component_registry.get_component_id<T>(),
+                    .component_data = new T(data),
+                    .component_destructor = [](void const *ptr) {
+                      delete static_cast<T const *>(ptr);
+                    }}}};
     buffer.commands.push_back(cmd);
   }
 
   template <typename T> void remove_component(u_int32_t entity_id) {
-    Command cmd = {.type = REMOVE,
-                   .action = {.remove = {.entity_id = entity_id,
-                                         .component_type = typeid(T)}}};
+    Command cmd = {
+        .type = REMOVE,
+        .action = {.remove = {.entity_id = entity_id,
+                              .component_type =
+                                  component_registry.get_component_id<T>()}}};
     buffer.commands.push_back(cmd);
   }
 };

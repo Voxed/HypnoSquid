@@ -4,19 +4,28 @@
 #include <thread>
 
 #include "HypnoSquid.Core/Engine.hh"
+#include "TestPlugin/include/TestPlugin.hh"
 
 using namespace hs::core;
 using namespace ::filters;
 
+constexpr auto MainPlugin = PID("Main");
+
 struct TestData {
+  static constexpr CID ID = {MainPlugin, "TestData"};
+
   u_int32_t a;
 };
 
 struct TestData2 {
+  static constexpr CID ID = {MainPlugin, "TestData"};
+
   u_int32_t b;
 };
 
-struct TestData3 {};
+struct TestData3 {
+  static constexpr CID ID = {MainPlugin, "TestData"};
+};
 
 void test(Commands commands, EntityFactory &entity_factory) {
   for (u_int32_t i = 0; i < 2; i++) {
@@ -24,6 +33,7 @@ void test(Commands commands, EntityFactory &entity_factory) {
     commands.add_component<TestData>(e, {.a = i});
     if (i == 0 || i == 1) {
       commands.add_component<TestData2>(e);
+      commands.add_component<TestPluginC>(e);
       if (i == 1) {
         commands.add_component<TestData3>(e);
       }
@@ -44,10 +54,10 @@ void test2(Query<TestData, Entity, const TestData2> &query,
 }
 
 void test3(Query<All<Changed<TestData>, Not<TestData3>>, TestData, Entity> &q) {
-  std::cout << "New" << std::endl;
+  // std::cout << "New" << std::endl;
   for (auto t : q.iter()) {
     auto c = get<0>(t);
-    std::cout << "CHANGED!" << c->a << ":" << get<1>(t) << std::endl;
+    // std::cout << "CHANGED!" << c->a << ":" << get<1>(t) << std::endl;
   }
 }
 
