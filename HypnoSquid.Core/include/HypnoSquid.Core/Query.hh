@@ -73,6 +73,53 @@ struct QueryBuffer {
   static QueryBuffer from_query(std::type_identity<Query<Filter, Args...>>, ComponentRegistry &component_registry) {
     return from_query(std::type_identity<Query<Args...>>(), component_registry);
   }
+
+  template <class... Args> bool is_suitable(ComponentRegistry &component_registry) {
+    bool suitable = true;
+    // Check if all args are found in layout items
+    (
+        [&]() {
+          if constexpr (!std::is_same_v<Args, u_int32_t>) {
+            bool found_layout = false;
+            for (auto &l : layout) {
+              if (l.type == COMPONENT) {
+                if (component_registry.template get_component_id<std::remove_const_t<Args>>() ==
+                    l.data.component_type) {
+                  found_layout = true;
+                }
+              }
+            }
+            if (!found_layout) {
+              suitable = false;
+              std::cout << "FAILED" << std::endl;
+            }
+          }
+        }(),
+        ...);
+    if (suitable) {
+      // Check if all layout items are found in args
+      for (auto &l : layout) {
+        if (l.type == COMPONENT) {
+          bool found_arg = false;
+          (
+              [&]() {
+                if constexpr (!std::is_same_v<Args, u_int32_t>) {
+                  if (component_registry.template get_component_id<std::remove_const_t<Args>>() ==
+                      l.data.component_type) {
+                    found_arg = true;
+                  }
+                }
+              }(),
+              ...);
+          if (!found_arg) {
+            suitable = false;
+            break;
+          }
+        }
+      }
+    }
+    return suitable;
+  }
 };
 
 /*

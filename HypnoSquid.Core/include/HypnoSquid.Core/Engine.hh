@@ -124,16 +124,26 @@ class Engine {
     return Commands(create_command_buffer(), component_registry);
   }
 
+  template <class... Args> QueryBuffer &retrieve_suitable_buffer() {
+    for (auto &buff : query_buffers) {
+      if (buff->template is_suitable<Args...>(component_registry)) {
+        std::cout << "FOUND SUITABLE" << std::endl;
+        return *(buff.get());
+      }
+    }
+    query_buffers.emplace_back(std::unique_ptr<QueryBuffer>(
+        new QueryBuffer(QueryBuffer::from_query(std::type_identity<Query<Args...>>(), component_registry))));
+    return *(query_buffers.back().get());
+  };
+
   template <class First, class... Args>
   Query<First, Args...> instantiate_parameter(std::type_identity<Query<First, Args...>>, SystemState &state) {
-    query_buffers.emplace_back(std::unique_ptr<QueryBuffer>(
-        new QueryBuffer(QueryBuffer::from_query(std::type_identity<Query<First, Args...>>(), component_registry))));
     if constexpr (concepts::Filter<First>)
       return Query<First, Args...>(
-          *(query_buffers.back().get()), state, component_registry,
+          retrieve_suitable_buffer<Args...>(), state, component_registry,
           [this, &state](const std::unordered_set<Entity> &entities) { return apply_filter<First>(entities, state); });
     else
-      return Query<First, Args...>(*(query_buffers.back().get()), state, component_registry);
+      return Query<First, Args...>(retrieve_suitable_buffer<First, Args...>(), state, component_registry);
   }
 
   template <class... Parameters>
@@ -316,9 +326,9 @@ public:
   }
 
   void run() {
+    std::cout << "Query buffers: " << query_buffers.size() << std::endl;
     while (running) {
       invoke_systems();
-      std::cout << "Processing commands" << std::endl;
       process_commands();
 // #define PRINT_MEMORY
 #ifdef PRINT_MEMORY
