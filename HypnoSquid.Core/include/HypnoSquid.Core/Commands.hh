@@ -9,7 +9,7 @@
 namespace hs {
 namespace core {
 
-enum CommandType { REMOVE, ADD };
+enum CommandType { REMOVE, ADD, EXIT };
 
 struct Command {
   CommandType type;
@@ -53,6 +53,11 @@ public:
     Command cmd = {
         .type = REMOVE,
         .action = {.remove = {.entity_id = entity_id, .component_type = component_registry.get_component_id<T>()}}};
+    buffer.commands.push_back(cmd);
+  }
+
+  void exit() {
+    Command cmd{.type = EXIT};
     buffer.commands.push_back(cmd);
   }
 };

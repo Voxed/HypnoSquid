@@ -28,7 +28,7 @@ struct TestData3 {
 };
 
 void test(Commands commands, EntityFactory &entity_factory) {
-  for (u_int32_t i = 0; i < 2; i++) {
+  for (u_int32_t i = 0; i < 50; i++) {
     u_int32_t e = entity_factory.create_entity();
     commands.add_component<TestData>(e, {.a = i});
     if (i == 0 || i == 1) {
@@ -43,8 +43,7 @@ void test(Commands commands, EntityFactory &entity_factory) {
   }
 }
 
-void test2(Query<TestData, Entity, const TestData2> &query,
-           Query<TestData> &query2) {
+void test2(Query<TestData, Entity, const TestData2> &query, Query<TestData> &query2) {
   for (auto t : query.iter()) {
     auto &v = get<0>(t);
     if (get<1>(t) == 52)
@@ -53,8 +52,7 @@ void test2(Query<TestData, Entity, const TestData2> &query,
   }
 }
 
-void test5(Query<TestData, Entity, const TestData2> &query,
-           Query<TestData> &query2) {
+void test5(Query<TestData, Entity, const TestData2> &query, Query<TestData> &query2) {
   for (auto t : query.iter()) {
     auto &v = get<0>(t);
     if (get<1>(t) == 51)
@@ -63,18 +61,18 @@ void test5(Query<TestData, Entity, const TestData2> &query,
   }
 }
 
-void test3(Query<All<Changed<TestData>, Not<TestData3>>, TestData, Entity> &q) {
+void test3(Query<All<Changed<TestData>, Not<TestData3>>, TestData, Entity> &q, Commands cmd) {
   std::cout << "New" << std::endl;
   for (auto t : q.iter()) {
     auto c = get<0>(t);
+    if (get<1>(t) > 6500)
+      cmd.exit();
     std::cout << "CHANGED!" << c->a << ":" << get<1>(t) << std::endl;
   }
 }
 
 // Temporary system to stop engine from flying away.
-void sleep_system(EntityFactory &ef) {
-  std::this_thread::sleep_for(std::chrono::milliseconds(16));
-}
+void sleep_system(EntityFactory &ef) { std::this_thread::sleep_for(std::chrono::milliseconds(16)); }
 
 int main() {
   hs::core::Engine engine;

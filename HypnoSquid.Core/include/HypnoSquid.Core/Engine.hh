@@ -11,6 +11,7 @@
 #include "Entity.hh"
 #include "Filter.hh"
 #include "Query.hh"
+#include "config.hh"
 
 #include <dlfcn.h>
 #include <fstream>
@@ -52,6 +53,8 @@ class Engine {
   EntityFactory entity_factory;
 
   ComponentRegistry component_registry;
+
+  bool running = true;
 
   template <concepts::Filter... Filters>
   std::unordered_set<Entity> apply_all_filters(std::type_identity<filters::All<Filters...>>,
@@ -223,6 +226,10 @@ class Engine {
           remove_component(action.entity_id, action.component_type);
           break;
         }
+        case EXIT: {
+          running = false;
+          break;
+        }
         }
       }
     }
@@ -270,9 +277,9 @@ class Engine {
 
 public:
   Engine() {
-    if (std::filesystem::exists("hypnosquid.json")) {
+    if (std::filesystem::exists(HS_CFG_PATH)) {
       std::cout << "Found engine configuration!" << std::endl;
-      std::ifstream engine_config_file("hypnosquid.json");
+      std::ifstream engine_config_file(HS_CFG_PATH);
       nlohmann::json engine_config = nlohmann::json::parse(engine_config_file);
       if (engine_config.contains("plugins")) {
         auto plugin_paths = engine_config["plugins"].get<std::vector<std::string>>();
@@ -326,7 +333,7 @@ public:
   }
 
   void run() {
-    while (true) {
+    while (running) {
       invoke_systems();
       process_commands();
     }
