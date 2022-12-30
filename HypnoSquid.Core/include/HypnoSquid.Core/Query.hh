@@ -151,10 +151,13 @@ protected:
       entities.clear();
       for (auto &p : buffer.items) {
         int idx = 0;
-        entities.emplace(p.first,
-                         std::move(std::make_tuple(
-                             create(std::type_identity<std::remove_const_t<create_component_reference_t<Components>>>(),
-                                    buffer_mapping.map([&]() { return idx++; }()), p.first, p.second)...)));
+        [&]<std::size_t... Is>(std::index_sequence<Is...>) {
+          entities.emplace(
+              p.first, std::move(std::make_tuple(
+                           create(std::type_identity<std::remove_const_t<create_component_reference_t<Components>>>(),
+                                  buffer_mapping.map(Is), p.first, p.second)...)));
+        }
+        (std::make_index_sequence<sizeof...(Components)>{});
       }
     }
 
