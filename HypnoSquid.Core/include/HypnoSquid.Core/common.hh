@@ -8,8 +8,9 @@ namespace core {
 
 template <class T> void simple_deleter(void const *ptr) { delete static_cast<T const *>(ptr); }
 
-template <class T> constexpr std::unique_ptr<void, void (*)(void const *)> make_unique_void(T *ptr) {
-  return std::unique_ptr<void, void (*)(void const *)>(ptr, simple_deleter<T>);
+using unique_void_ptr = std::unique_ptr<void, void (*)(void const *)>;
+template <class T> constexpr unique_void_ptr make_unique_void(T *ptr) {
+  return unique_void_ptr(ptr, simple_deleter<T>);
 }
 
 namespace concepts {

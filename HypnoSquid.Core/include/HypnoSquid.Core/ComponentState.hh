@@ -10,7 +10,7 @@ struct ComponentState {
   u_int64_t last_changed = 0;
 
   [[nodiscard]] bool has_changed(SystemState system_state) const {
-    return system_state.last_invocation_id <= last_changed;
+    return system_state.last_invocation_id < last_changed;
   }
 };
 

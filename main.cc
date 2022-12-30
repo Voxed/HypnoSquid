@@ -65,8 +65,10 @@ void test3(Query<All<Changed<TestData>, Not<TestData3>>, TestData, Entity> &q, C
   std::cout << "New" << std::endl;
   for (auto t : q.iter()) {
     auto c = get<0>(t);
-    if (get<1>(t) > 6500)
+    if (get<1>(t) > 6500) {
+      std::cout << "Exiting gracefully :)" << std::endl;
       cmd.exit();
+    }
     std::cout << "CHANGED!" << c->a << ":" << get<1>(t) << std::endl;
   }
 }
