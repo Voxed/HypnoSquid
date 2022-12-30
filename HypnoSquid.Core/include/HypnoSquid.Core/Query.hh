@@ -85,29 +85,31 @@ struct QueryBufferMapping {
   template <class... Components>
   static QueryBufferMapping from(QueryBuffer &buffer, ComponentRegistry &component_registry) {
     QueryBufferMapping mapping;
-    int idx = 0;
-    (
-        [&]() {
-          if constexpr (std::is_same_v<u_int32_t, Components>) {
-            mapping.mapping[idx++] = 0; // Not going to be used since entities are not part of the buffer.
-          } else {
-            int layout_idx = 0;
-            for (auto &layout_item : buffer.layout) {
-              bool done = false;
-              switch (layout_item.type) {
-              case COMPONENT:
-                if (component_registry.template get_component_id<Components>() == layout_item.data.component_type) {
-                  mapping.mapping[idx++] = layout_idx;
-                  done = true;
+    [&]<std::size_t... Is>(std::index_sequence<Is...>) {
+      (
+          [&]() {
+            if constexpr (std::is_same_v<u_int32_t, Components>) {
+              mapping.mapping[Is] = 0; // Not going to be used since entities are not part of the buffer.
+            } else {
+              int layout_idx = 0;
+              for (auto &layout_item : buffer.layout) {
+                bool done = false;
+                switch (layout_item.type) {
+                case COMPONENT:
+                  if (component_registry.template get_component_id<Components>() == layout_item.data.component_type) {
+                    mapping.mapping[Is] = layout_idx;
+                    done = true;
+                  }
                 }
+                if (done)
+                  break;
+                layout_idx += 1;
               }
-              if (done)
-                break;
-              layout_idx += 1;
             }
-          }
-        }(),
-        ...);
+          }(),
+          ...);
+    }
+    (std::make_index_sequence<sizeof...(Components)>{});
 
     for (auto &p : mapping.mapping) {
       std::cout << p.first << "->" << p.second << std::endl;
