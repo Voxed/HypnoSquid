@@ -88,7 +88,7 @@ struct QueryBufferMapping {
     (
         [&]() {
           if constexpr (std::is_same_v<u_int32_t, Components>) {
-            mapping.mapping[idx++] = -1;
+            mapping.mapping[idx++] = 0; // Not going to be used since entities are not part of the buffer.
           } else {
             int layout_idx = 0;
             for (auto &layout_item : buffer.layout) {
