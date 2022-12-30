@@ -8,18 +8,20 @@
 namespace hs {
 namespace core {
 
+using ComponentID = u_int32_t;
+
 /*
  * Attaches a unique id to every component based on their CID.
  * O(1) speed complexity if I'm correct.
  */
 class ComponentRegistry {
 
-  std::unordered_map<std::string, u_int32_t> component_ids;
-  u_int32_t next_component_id = 1;
+  std::unordered_map<std::string, ComponentID> component_ids;
+  ComponentID next_component_id = 1;
 
 public:
-  template <class Component> u_int32_t get_component_id() {
-    static u_int32_t id = 0;
+  template <class Component> ComponentID get_component_id() {
+    static ComponentID id = 0;
     if (id == 0) {
       std::string cid = Component::ID.get_id();
       if (component_ids.contains(cid)) {

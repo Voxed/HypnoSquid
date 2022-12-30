@@ -8,6 +8,7 @@
 #include "Commands.hh"
 #include "ComponentRegistry.hh"
 #include "ComponentState.hh"
+#include "Entity.hh"
 #include "Filter.hh"
 #include "Query.hh"
 
@@ -27,40 +28,25 @@
 namespace hs {
 namespace core {
 
-using Entity = u_int32_t;
-
-// Atomic entity counter, to allow for immediate id allocation in concurrent
-// command queues.
-class EntityFactory {
-  u_int32_t next_entity_id = 0;
-  std::mutex mut;
-
-public:
-  u_int32_t create_entity() {
-    mut.lock();
-    u_int32_t id = next_entity_id++;
-    mut.unlock();
-    return id;
-  }
-};
+using SystemID = u_int32_t;
+using ParameterID = u_int32_t;
 
 class Engine {
   using System = std::pair<SystemState, std::function<void(SystemState &)>>;
 
   std::unordered_map<
-      u_int32_t,
+      ComponentID,
       std::unordered_map<
-          u_int32_t, std::pair<ComponentState,
-                               std::unique_ptr<void, void (*)(void const *)>>>>
+          Entity, std::pair<ComponentState,
+                            std::unique_ptr<void, void (*)(void const *)>>>>
       data;
 
-  std::unordered_map<u_int32_t, std::unordered_set<u_int32_t>>
-      entity_components;
+  std::unordered_map<Entity, std::unordered_set<ComponentID>> entity_components;
 
-  u_int32_t next_system_id = 0;
+  SystemID next_system_id = 0;
   std::unordered_map<
-      u_int32_t, std::unordered_map<
-                     u_int32_t, std::unique_ptr<void, void (*)(void const *)>>>
+      SystemID, std::unordered_map<
+                    ParameterID, std::unique_ptr<void, void (*)(void const *)>>>
       queries;
   std::vector<std::unique_ptr<QueryBuffer>> query_buffers;
 
@@ -156,15 +142,13 @@ class Engine {
   }
 
   EntityFactory &instantiate_parameter(std::type_identity<EntityFactory &>,
-                                       SystemState &state,
-                                       u_int32_t parameter_id,
-                                       u_int32_t system_id) {
+                                       SystemState &state, ParameterID,
+                                       SystemID) {
     return entity_factory;
   }
 
   Commands instantiate_parameter(std::type_identity<Commands>,
-                                 SystemState &state, u_int32_t parameter_id,
-                                 u_int32_t system_id) {
+                                 SystemState &state, ParameterID, SystemID) {
     CommandBuffer &command_buffer = command_queue.emplace_back();
     return Commands(command_buffer, component_registry);
   }
@@ -172,8 +156,8 @@ class Engine {
   template <class First, class... Args>
   Query<First, Args...> &
   instantiate_parameter(std::type_identity<Query<First, Args...> &>,
-                        SystemState &state, u_int32_t parameter_id,
-                        u_int32_t system_id) {
+                        SystemState &state, ParameterID parameter_id,
+                        SystemID system_id) {
     if (!queries[system_id].contains(parameter_id)) {
       query_buffers.emplace_back(std::unique_ptr<QueryBuffer>(new QueryBuffer(
           QueryBuffer::from_query(std::type_identity<Query<First, Args...>>(),
@@ -181,24 +165,16 @@ class Engine {
       if constexpr (concepts::Filter<First>) {
         queries[system_id].emplace(
             parameter_id,
-            std::unique_ptr<void, void (*)(void const *)>(
-                new Query<First, Args...>(
-                    *(query_buffers.back().get()), state, component_registry,
-                    [this, &state](const std::unordered_set<Entity> &entities) {
-                      return apply_filter<First>(entities, state);
-                    }),
-                [](void const *ptr) {
-                  delete static_cast<Query<Args...> const *>(ptr);
-                }));
+            make_unique_void(new Query<First, Args...>(
+                *(query_buffers.back().get()), state, component_registry,
+                [this, &state](const std::unordered_set<Entity> &entities) {
+                  return apply_filter<First>(entities, state);
+                })));
       } else {
         queries[system_id].emplace(
             parameter_id,
-            std::unique_ptr<void, void (*)(void const *)>(
-                new Query<First, Args...>(*(query_buffers.back().get()), state,
-                                          component_registry),
-                [](void const *ptr) {
-                  delete static_cast<Query<Args...> const *>(ptr);
-                }));
+            make_unique_void(new Query<First, Args...>(
+                *(query_buffers.back().get()), state, component_registry)));
       }
     }
     return *static_cast<Query<First, Args...> *>(
@@ -210,7 +186,7 @@ class Engine {
   template <class... Parameters>
   std::function<void(SystemState &)>
   bind_system(std::function<void(SystemState &, Parameters...)> system) {
-    u_int32_t system_id = next_system_id++;
+    SystemID system_id = next_system_id++;
     std::function<void(SystemState &)> func = [&, system_id,
                                                system](SystemState &state) {
       int i = 0;
@@ -225,7 +201,7 @@ class Engine {
     return func;
   }
 
-  void update_queries(u_int32_t entity) {
+  void update_queries(Entity entity) {
     for (auto &buff : query_buffers) {
       bool belongs = true;
       for (auto &l : buff->layout) {
@@ -259,7 +235,7 @@ class Engine {
   }
 
   void
-  add_component(u_int32_t entity, u_int32_t component_type,
+  add_component(Entity entity, ComponentID component_type,
                 std::unique_ptr<void, void (*)(void const *)> &component_data) {
     data[component_type].emplace(
         entity,
@@ -271,7 +247,7 @@ class Engine {
     update_queries(entity);
   }
 
-  void remove_component(u_int32_t entity, u_int32_t component_type) {
+  void remove_component(Entity entity, ComponentID component_type) {
     data[component_type].erase(entity);
 
     entity_components[entity].erase(component_type);

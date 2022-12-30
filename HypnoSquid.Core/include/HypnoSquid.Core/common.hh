@@ -1,9 +1,20 @@
 #pragma once
 
+#include <memory>
 #include <type_traits>
 
 namespace hs {
 namespace core {
+
+template <class T> void simple_deleter(void const *ptr) {
+  delete static_cast<T const *>(ptr);
+}
+
+template <class T>
+constexpr std::unique_ptr<void, void (*)(void const *)>
+make_unique_void(T *ptr) {
+  return std::unique_ptr<void, void (*)(void const *)>(ptr, simple_deleter<T>);
+}
 
 namespace concepts {
 template <class T>
