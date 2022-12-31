@@ -235,7 +235,6 @@ class Engine {
   std::thread invoke_system(const System &system, u_int32_t index) {
     return std::thread([&, index]() {
       std::unique_lock lk(system_resource_mutex);
-
       system_resource_cv.wait(lk, [&] {
         return std::ranges::all_of(system.first.mutable_components.begin(), system.first.mutable_components.end(),
                                    [&](auto &c) {
@@ -245,28 +244,20 @@ class Engine {
                std::ranges::all_of(system.first.const_components.begin(), system.first.const_components.end(),
                                    [&](auto &c) { return !mutable_component_references.contains(c); });
       });
-
       mutable_component_references.insert(system.first.mutable_components.begin(),
                                           system.first.mutable_components.end());
       for (auto &m : system.first.const_components)
         const_component_reference_count[m]++;
-
-      invocation_id++;
-      InvocationID inv = invocation_id;
+      InvocationID inv = ++invocation_id;
       lk.unlock();
-
-      invocation_id++;
       system.second(inv);
-
       lk.lock();
-
       for (auto &m : system.first.mutable_components)
         mutable_component_references.erase(m);
       for (auto &m : system.first.const_components)
         const_component_reference_count[m]--;
 
       lk.unlock();
-
       system_resource_cv.notify_all();
     });
   }
