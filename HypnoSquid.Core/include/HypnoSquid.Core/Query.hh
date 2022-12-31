@@ -119,6 +119,32 @@ struct QueryBuffer {
     }
     return suitable;
   }
+
+  void update(Entity entity, ComponentStore &store, u_int32_t invocation_id) {
+    bool belongs = true;
+    for (auto &l : layout)
+      if (l.type == COMPONENT && !store.has_component(l.data.component_type, entity)) {
+        belongs = false;
+        break;
+      }
+    if (!items.contains(entity) && belongs) {
+      std::vector<QueryBufferItem> _items;
+      for (auto &l : layout)
+        switch (l.type) {
+        case COMPONENT: {
+          _items.push_back(QueryBufferItem{.component = {store.get_component_data(l.data.component_type, entity),
+                                                         *store.get_component_state(l.data.component_type, entity)}});
+          break;
+        }
+        }
+      items.emplace(entity, _items);
+      last_changed = invocation_id;
+    }
+    if (items.contains(entity) && !belongs) {
+      items.erase(entity);
+      last_changed = invocation_id;
+    }
+  }
 };
 
 /*

@@ -142,7 +142,6 @@ class Engine {
   template <class... Args> QueryBuffer &retrieve_suitable_buffer() {
     for (auto &buff : query_buffers) {
       if (buff->template is_suitable<Args...>(component_registry)) {
-        std::cout << "FOUND SUITABLE" << std::endl;
         return *(buff.get());
       }
     }
@@ -190,29 +189,7 @@ class Engine {
 
   void update_queries(Entity entity) {
     for (auto &buff : query_buffers) {
-      bool belongs = true;
-      for (auto &l : buff->layout)
-        if (l.type == COMPONENT && !store.has_component(l.data.component_type, entity)) {
-          belongs = false;
-          break;
-        }
-      if (!buff->items.contains(entity) && belongs) {
-        std::vector<QueryBufferItem> items;
-        for (auto &l : buff->layout)
-          switch (l.type) {
-          case COMPONENT: {
-            items.push_back(QueryBufferItem{.component = {store.get_component_data(l.data.component_type, entity),
-                                                          *store.get_component_state(l.data.component_type, entity)}});
-            break;
-          }
-          }
-        buff->items.emplace(entity, items);
-        buff->last_changed = invocation_id;
-      }
-      if (buff->items.contains(entity) && !belongs) {
-        buff->items.erase(entity);
-        buff->last_changed = invocation_id;
-      }
+      buff->update(entity, store, invocation_id);
     }
   }
 
