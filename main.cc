@@ -118,7 +118,7 @@ void sys_c(Query<TestData> q) {
 }
 
 // This system needs some other component, so it should run asynchronous to sys_c
-void sys_d(Query<TestData2> q, Query<const TestData> q2) {
+void sys_d(Query<TestData2> q, Query<const TestData2> q2) {
   std::cout << "StartD" << std::endl;
   std::this_thread::sleep_for(std::chrono::milliseconds(500));
   std::cout << "EndD" << std::endl;

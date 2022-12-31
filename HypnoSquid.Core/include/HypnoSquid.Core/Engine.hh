@@ -260,33 +260,19 @@ class Engine {
       std::unique_lock lk(system_resource_mutex);
 
       system_resource_cv.wait(lk, [&] {
-        // Calculate whether the system requirements can be met at this time.
-        // Mutable requirements
-        for (auto &m : system.first.mutable_components) {
-          if (mutable_component_references.contains(m) || const_component_reference_count[m] > 0) {
-            return false;
-          }
-        }
-        // Constant requirements
-        for (auto &m : system.first.const_components) {
-          if (mutable_component_references.contains(m)) {
-            return false;
-          }
-        }
-
-        return true;
+        return std::ranges::all_of(system.first.mutable_components.begin(), system.first.mutable_components.end(),
+                                   [&](auto &c) {
+                                     return !mutable_component_references.contains(c) &&
+                                            const_component_reference_count[c] == 0;
+                                   }) &&
+               std::ranges::all_of(system.first.const_components.begin(), system.first.const_components.end(),
+                                   [&](auto &c) { return !mutable_component_references.contains(c); });
       });
 
-      // We're good! Acquire resources!
-      for (auto &m : system.first.mutable_components) {
-        mutable_component_references.insert(m);
-      }
-      for (auto &m : system.first.const_components) {
-        if (!system.first.mutable_components.contains(
-                m)) { // If we already have mutable ownership, we don't need constant ownership.
-          const_component_reference_count[m]++;
-        }
-      }
+      mutable_component_references.insert(system.first.mutable_components.begin(),
+                                          system.first.mutable_components.end());
+      for (auto &m : system.first.const_components)
+        const_component_reference_count[m]++;
 
       invocation_id++;
       InvocationID inv = invocation_id;
@@ -297,19 +283,13 @@ class Engine {
 
       lk.lock();
 
-      // Release resources
-      for (auto &m : system.first.mutable_components) {
+      for (auto &m : system.first.mutable_components)
         mutable_component_references.erase(m);
-      }
-      for (auto &m : system.first.const_components) {
-        if (!system.first.mutable_components.contains(m)) {
-          const_component_reference_count[m]--;
-        }
-      }
+      for (auto &m : system.first.const_components)
+        const_component_reference_count[m]--;
 
       lk.unlock();
 
-      // Notify that new resources might be available!
       system_resource_cv.notify_all();
     });
   }
