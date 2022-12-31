@@ -88,14 +88,22 @@ void test_plugin(Query<const TestPluginC, Entity> q, Query<TestData4> q2, Comman
 }
  */
 
-void sys_a(Query<const TestData> q) {
+void sys_a(Query<const TestData> q, Commands cmd, EntityFactory &ef) {
   std::cout << "StartA" << std::endl;
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
   std::cout << "EndA" << std::endl;
+  cmd.add_component<TestData>(ef.create_entity());
 }
 
-void sys_b(Query<const TestData> q) {
+void sys_b(Query<Changed<TestData>, const TestData, Entity> q, Commands cmd) {
   std::cout << "StartB" << std::endl;
+  for (auto &t : q.iter()) {
+    if (get<0>(t)->a > 3) {
+      cmd.remove_component<TestData>(get<1>(t));
+    } else {
+      std::cout << get<0>(t)->a << "-" << get<1>(t) << std::endl;
+    }
+  }
   std::cout << "EndB" << std::endl;
 }
 
@@ -103,11 +111,14 @@ void sys_b(Query<const TestData> q) {
 void sys_c(Query<TestData> q) {
   std::cout << "StartC" << std::endl;
   std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+  for (auto &t : q.iter()) {
+    get<0>(t).get_mut()->a += 1;
+  }
   std::cout << "EndC" << std::endl;
 }
 
 // This system needs some other component, so it should run asynchronous to sys_c
-void sys_d(Query<TestData2> q) {
+void sys_d(Query<TestData2> q, Query<const TestData> q2) {
   std::cout << "StartD" << std::endl;
   std::this_thread::sleep_for(std::chrono::milliseconds(500));
   std::cout << "EndD" << std::endl;

@@ -8,6 +8,7 @@
 #include "Commands.hh"
 #include "ComponentRegistry.hh"
 #include "ComponentState.hh"
+#include "ComponentStore.hh"
 #include "Entity.hh"
 #include "Filter.hh"
 #include "Query.hh"
@@ -41,14 +42,12 @@ using InvocationID =
 
 class Engine {
   using System = std::pair<SystemRequirements, std::function<void(InvocationID)>>;
-  std::unordered_map<ComponentID, std::unordered_map<Entity, std::pair<ComponentState, unique_void_ptr>>> data;
 
   std::mutex system_resource_mutex;
   std::condition_variable system_resource_cv;
   std::unordered_map<ComponentID, u_int32_t> const_component_reference_count;
   std::unordered_set<ComponentID> mutable_component_references;
 
-  std::unordered_map<Entity, std::unordered_set<ComponentID>> entity_components;
   std::vector<std::unique_ptr<QueryBuffer>> query_buffers;
   std::vector<System> systems;
   std::vector<System> synchronised_systems;
@@ -59,7 +58,10 @@ class Engine {
   InvocationID invocation_id = 0;
 
   EntityFactory entity_factory;
+
   ComponentRegistry component_registry;
+  ComponentStore store;
+
   bool running = true;
 
   template <concepts::Filter... Filters>
@@ -99,8 +101,7 @@ class Engine {
   std::unordered_set<Entity> apply_filter(const std::unordered_set<Entity> &entities, SystemState system_state) {
     std::unordered_set<Entity> filtered;
     for (const Entity &e : entities)
-      if (data[component_registry.template get_component_id<typename Filter::component_type>()].at(e).first.has_changed(
-              system_state))
+      if (store.get_component_state<typename Filter::component_type>(e)->has_changed(system_state))
         filtered.insert(e);
     return filtered;
   }
@@ -109,7 +110,7 @@ class Engine {
   std::unordered_set<Entity> apply_filter(const std::unordered_set<Entity> &entities, SystemState system_state) {
     std::unordered_set<Entity> filtered;
     for (const Entity &e : entities)
-      if (!data[component_registry.template get_component_id<typename Filter::component_type>()].contains(e))
+      if (!store.has_component<typename Filter::component_type>(e))
         filtered.insert(e);
     return filtered;
   }
@@ -165,13 +166,11 @@ class Engine {
                                               SystemRequirements &requirements) {
     if constexpr (concepts::Filter<First>) {
       (calculate_system_requirement<Args>(requirements), ...);
-      return Query<First, Args...>(
-          retrieve_suitable_buffer<Args...>(), state, component_registry,
-          [this, &state](const std::unordered_set<Entity> &entities) { return apply_filter<First>(entities, state); });
+      return Query<First, Args...>(retrieve_suitable_buffer<Args...>(), state, component_registry, store);
     } else {
       calculate_system_requirement<First>(requirements);
       (calculate_system_requirement<Args>(requirements), ...);
-      return Query<First, Args...>(retrieve_suitable_buffer<First, Args...>(), state, component_registry);
+      return Query<First, Args...>(retrieve_suitable_buffer<First, Args...>(), state, component_registry, store);
     }
   }
 
@@ -193,7 +192,7 @@ class Engine {
     for (auto &buff : query_buffers) {
       bool belongs = true;
       for (auto &l : buff->layout)
-        if (l.type == COMPONENT && !entity_components[entity].contains(l.data.component_type)) {
+        if (l.type == COMPONENT && !store.has_component(l.data.component_type, entity)) {
           belongs = false;
           break;
         }
@@ -202,8 +201,8 @@ class Engine {
         for (auto &l : buff->layout)
           switch (l.type) {
           case COMPONENT: {
-            auto &pair = data[l.data.component_type].at(entity);
-            items.push_back(QueryBufferItem{.component = {pair.second.get(), pair.first}});
+            items.push_back(QueryBufferItem{.component = {store.get_component_data(l.data.component_type, entity),
+                                                          *store.get_component_state(l.data.component_type, entity)}});
             break;
           }
           }
@@ -219,22 +218,16 @@ class Engine {
 
   void add_component(Entity entity, ComponentID component_type,
                      std::unique_ptr<void, void (*)(void const *)> &component_data) {
-    if (!entity_components[entity].contains(component_type)) {
-      data[component_type].emplace(
-          entity, std::make_pair(ComponentState{.last_changed = invocation_id}, std::move(component_data)));
-      entity_components[entity].insert(component_type);
+    if (!store.has_component(component_type, entity)) {
+      store.add_component(component_type, entity, std::move(component_data), invocation_id);
       update_queries(entity);
     }
   }
 
   void remove_component(Entity entity, ComponentID component_type) {
-    if (entity_components[entity].contains(component_type)) {
-      data[component_type].erase(entity);
-      entity_components[entity].erase(component_type);
+    if (store.has_component(component_type, entity)) {
+      store.remove_component(component_type, entity);
       update_queries(entity);
-      if (entity_components[entity].empty()) {
-        entity_components.erase(entity);
-      }
     }
   }
 
@@ -375,7 +368,7 @@ class Engine {
   }
 
 public:
-  Engine() {
+  Engine() : store(component_registry) {
     if (std::filesystem::exists(HS_CFG_PATH)) {
       std::cout << "Found engine configuration!" << std::endl;
       std::ifstream engine_config_file(HS_CFG_PATH);
