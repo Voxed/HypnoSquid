@@ -4,10 +4,11 @@
 
 #include <string>
 
-constexpr auto TestPlugin = hs::core::PID("TestPlugin");
+#undef HS_PLUGIN
+#define HS_PLUGIN TestPlugin
 
 struct TestPluginC {
-  static constexpr hs::core::CID ID{TestPlugin, "TestPluginC"};
+  HS_COMPONENT(TestPluginC)
 };
 
 class TestPlugin {};

@@ -1,6 +1,5 @@
 #include <functional>
 #include <iostream>
-#include <string>
 #include <thread>
 
 #include "HypnoSquid.Core/Engine.hh"
@@ -9,26 +8,27 @@
 using namespace hs::core;
 using namespace ::filters;
 
-constexpr auto MainPlugin = PID("Main");
+#undef HS_PLUGIN
+#define HS_PLUGIN Main
 
 struct TestData {
-  static constexpr hs::core::CID ID{MainPlugin, "TestData"};
+  HS_COMPONENT(TestData)
 
   u_int32_t a;
 };
 
 struct TestData2 {
-  static constexpr hs::core::CID ID{MainPlugin, "TestData2"};
+  HS_COMPONENT(TestData2)
 
   u_int32_t b;
 };
 
 struct TestData3 {
-  static constexpr CID ID{MainPlugin, "TestData3"};
+  HS_COMPONENT(TestData3)
 };
 
 struct TestData4 {
-  static constexpr CID ID{MainPlugin, "TestData4"};
+  HS_COMPONENT(TestData4)
 };
 
 void sys_a(Query<const TestData> q, Commands cmd, EntityFactory &ef) {
