@@ -245,13 +245,13 @@ class Engine {
     void *plugin_handle = dlopen(plugin_path.c_str(), RTLD_LAZY);
     if (plugin_handle == nullptr) {
       std::cout << "Failed to load plugin " << plugin_path << ", file not found." << std::endl;
-      exit(-1);
+      exit(EXIT_FAILURE);
     }
     void (*init_plugin)(Engine &);
     init_plugin = (decltype(init_plugin))dlsym(plugin_handle, "init_plugin");
     if (init_plugin == nullptr) {
       std::cout << "Failed to load plugin " << plugin_path << ", no init function." << std::endl;
-      exit(-1);
+      exit(EXIT_FAILURE);
     }
     init_plugin(*this);
   }

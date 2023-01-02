@@ -31,7 +31,7 @@ struct TestData4 {
   HS_COMPONENT(TestData4)
 };
 
-void sys_a(Query<const TestData> q, Commands cmd, EntityFactory &ef) {
+void sys_a(const Query<const TestData> &q, Commands cmd, EntityFactory &ef) {
   std::cout << "StartA" << std::endl;
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
   std::cout << "EndA" << std::endl;
