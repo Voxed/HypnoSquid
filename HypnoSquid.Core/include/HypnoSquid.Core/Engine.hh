@@ -13,7 +13,6 @@
 #include "Filter.hh"
 #include "Query.hh"
 #include "World.hh"
-#include "config.hh"
 
 #include <condition_variable>
 #include <dlfcn.h>
@@ -32,6 +31,12 @@
 
 namespace hs {
 namespace core {
+
+struct EngineCreateInfo {
+  bool use_config = true;
+  std::string config_path = "hypnosquid.json";
+  std::vector<std::string> plugins;
+};
 
 struct SystemRequirements {
   std::unordered_set<ComponentID> const_components;
@@ -113,11 +118,17 @@ class Engine {
     }
   }
 
+  template <class T> struct parameter_type : std::type_identity<T> {};
+  template <class Q>
+    requires(concepts::specialization_of<Query, std::remove_const_t<std::remove_reference_t<Q>>>)
+  struct parameter_type<Q> : std::type_identity<std::remove_const_t<std::remove_reference_t<Q>>> {};
+  template <class T> using parameter_type_t = typename parameter_type<T>::type;
+
   template <class... Parameters>
   System bind_system(std::function<void(Parameters...)> system, SystemState &system_state) {
     SystemRequirements requirements;
-    auto parameters = std::tuple<Parameters...>(
-        instantiate_parameter(std::type_identity<Parameters>(), system_state, requirements)...);
+    auto parameters = std::tuple<parameter_type_t<Parameters>...>(
+        instantiate_parameter(std::type_identity<parameter_type_t<Parameters>>(), system_state, requirements)...);
     std::function<void(InvocationID)> func = [&, system, parameters](InvocationID _invocation_id) {
       system_state.invocation_id = _invocation_id;
       [&]<std::size_t... Is>(std::index_sequence<Is...>) { system(get<Is>(parameters)...); }
@@ -258,17 +269,23 @@ class Engine {
   }
 
 public:
-  Engine() : world(component_registry) {
-    if (std::filesystem::exists(HS_CFG_PATH)) {
-      std::cout << "Found engine configuration!" << std::endl;
-      std::ifstream engine_config_file(HS_CFG_PATH);
-      nlohmann::json engine_config = nlohmann::json::parse(engine_config_file);
-      if (engine_config.contains("plugins")) {
-        auto plugin_paths = engine_config["plugins"].get<std::vector<std::string>>();
-        for (const auto &path : plugin_paths) {
-          load_plugin(path);
+  explicit Engine(const EngineCreateInfo &createInfo = EngineCreateInfo()) : world(component_registry) {
+    if (createInfo.use_config) {
+      if (std::filesystem::exists(createInfo.config_path)) {
+        std::cout << "Found engine configuration!" << std::endl;
+        std::ifstream engine_config_file(createInfo.config_path);
+        nlohmann::json engine_config = nlohmann::json::parse(engine_config_file);
+        if (engine_config.contains("plugins")) {
+          auto plugin_paths = engine_config["plugins"].get<std::vector<std::string>>();
+          for (const auto &path : plugin_paths) {
+            load_plugin(path);
+          }
         }
       }
+    }
+    // Load explicit plugins
+    for (const auto &path : createInfo.plugins) {
+      load_plugin(path);
     }
   }
 
