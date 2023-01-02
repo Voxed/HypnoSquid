@@ -307,19 +307,6 @@ public:
     while (running) {
       invoke_systems();
       process_commands();
-// #define PRINT_MEMORY
-#ifdef PRINT_MEMORY
-      size_t total_size_components = 0;
-      for (auto &p : data) {
-        total_size_components += p.second.size();
-      }
-      size_t total_size_entities = 0;
-      for (auto &p : entity_components) {
-        total_size_entities += p.second.size();
-      }
-      std::cout << data.size() << ", " << total_size_components << ", " << entity_components.size() << ", "
-                << total_size_entities << std::endl;
-#endif
     }
   }
 };
