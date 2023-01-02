@@ -112,7 +112,7 @@ void sys_c(Query<TestData> q) {
   std::cout << "StartC" << std::endl;
   std::this_thread::sleep_for(std::chrono::milliseconds(1000));
   for (auto &t : q.iter()) {
-    get<0>(t).get_mut()->a += 1;
+    get<0>(t).get_mut().a += 1;
   }
   std::cout << "EndC" << std::endl;
 }

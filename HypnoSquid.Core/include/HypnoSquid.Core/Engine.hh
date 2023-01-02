@@ -12,6 +12,7 @@
 #include "Entity.hh"
 #include "Filter.hh"
 #include "Query.hh"
+#include "World.hh"
 #include "config.hh"
 
 #include <condition_variable>
@@ -60,10 +61,10 @@ class Engine {
   EntityFactory entity_factory;
 
   ComponentRegistry component_registry;
-  ComponentStore store;
+  World world;
 
   bool running = true;
-  
+
   EntityFactory &instantiate_parameter(std::type_identity<EntityFactory &>, SystemState &state,
                                        SystemRequirements &requirements) {
     return entity_factory;
@@ -81,7 +82,7 @@ class Engine {
   template <class... Args> QueryBuffer &retrieve_suitable_buffer() {
     for (auto &buff : query_buffers) {
       if (buff->template is_suitable<Args...>(component_registry)) {
-        return *(buff.get());
+        return *buff;
       }
     }
     query_buffers.emplace_back(std::unique_ptr<QueryBuffer>(
@@ -104,11 +105,11 @@ class Engine {
                                               SystemRequirements &requirements) {
     if constexpr (concepts::Filter<First>) {
       (calculate_system_requirement<Args>(requirements), ...);
-      return Query<First, Args...>(retrieve_suitable_buffer<Args...>(), state, component_registry, store);
+      return Query<First, Args...>(retrieve_suitable_buffer<Args...>(), state, component_registry, world);
     } else {
       calculate_system_requirement<First>(requirements);
       (calculate_system_requirement<Args>(requirements), ...);
-      return Query<First, Args...>(retrieve_suitable_buffer<First, Args...>(), state, component_registry, store);
+      return Query<First, Args...>(retrieve_suitable_buffer<First, Args...>(), state, component_registry, world);
     }
   }
 
@@ -128,21 +129,23 @@ class Engine {
 
   void update_queries(Entity entity) {
     for (auto &buff : query_buffers) {
-      buff->update(entity, store, invocation_id);
+      buff->update(entity, world, invocation_id);
     }
   }
 
   void add_component(Entity entity, ComponentID component_type,
                      std::unique_ptr<void, void (*)(void const *)> &component_data) {
-    if (!store.has_component(component_type, entity)) {
-      store.add_component(component_type, entity, std::move(component_data), invocation_id);
+    AbstractComponentStore &store = world.get_component_store(component_type);
+    if (!store.has_component(entity)) {
+      store.add_component(entity, std::move(component_data), invocation_id);
       update_queries(entity);
     }
   }
 
   void remove_component(Entity entity, ComponentID component_type) {
-    if (store.has_component(component_type, entity)) {
-      store.remove_component(component_type, entity);
+    AbstractComponentStore &store = world.get_component_store(component_type);
+    if (store.has_component(entity)) {
+      store.remove_component(entity);
       update_queries(entity);
     }
   }
@@ -255,7 +258,7 @@ class Engine {
   }
 
 public:
-  Engine() : store(component_registry) {
+  Engine() : world(component_registry) {
     if (std::filesystem::exists(HS_CFG_PATH)) {
       std::cout << "Found engine configuration!" << std::endl;
       std::ifstream engine_config_file(HS_CFG_PATH);

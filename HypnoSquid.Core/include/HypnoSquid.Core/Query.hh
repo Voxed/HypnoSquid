@@ -2,6 +2,7 @@
 
 #include "ComponentReference.hh"
 #include "Filter.hh"
+#include "World.hh"
 #include <functional>
 #include <optional>
 #include <tuple>
@@ -27,13 +28,6 @@ template <> struct create_component_reference<u_int32_t> {
 
 template <class T> using create_component_reference_t = typename create_component_reference<T>::type;
 
-union QueryBufferItem {
-  struct {
-    void *data;
-    ComponentState &state;
-  } component;
-};
-
 enum QueryBufferLayoutItemType { COMPONENT };
 
 struct QueryBufferLayoutItem {
@@ -52,7 +46,7 @@ struct QueryBufferLayoutItem {
 
 struct QueryBuffer {
   std::vector<QueryBufferLayoutItem> layout;
-  std::unordered_map<u_int32_t, std::vector<QueryBufferItem>> items;
+  std::unordered_set<Entity> entities;
   u_int64_t last_changed = 0;
 
   template <template <class...> class Query, class... Args>
@@ -120,28 +114,20 @@ struct QueryBuffer {
     return suitable;
   }
 
-  void update(Entity entity, ComponentStore &store, u_int32_t invocation_id) {
+  void update(Entity entity, const World &world, u_int32_t invocation_id) {
     bool belongs = true;
     for (auto &l : layout)
-      if (l.type == COMPONENT && !store.has_component(l.data.component_type, entity)) {
+      if (l.type == COMPONENT && (!world.has_component_store(l.data.component_type) ||
+                                  !world.get_component_store(l.data.component_type).has_component(entity))) {
         belongs = false;
         break;
       }
-    if (!items.contains(entity) && belongs) {
-      std::vector<QueryBufferItem> _items;
-      for (auto &l : layout)
-        switch (l.type) {
-        case COMPONENT: {
-          _items.push_back(QueryBufferItem{.component = {store.get_component_data(l.data.component_type, entity),
-                                                         *store.get_component_state(l.data.component_type, entity)}});
-          break;
-        }
-        }
-      items.emplace(entity, _items);
+    if (!entities.contains(entity) && belongs) {
+      entities.insert(entity);
       last_changed = invocation_id;
     }
-    if (items.contains(entity) && !belongs) {
-      items.erase(entity);
+    if (entities.contains(entity) && !belongs) {
+      entities.erase(entity);
       last_changed = invocation_id;
     }
   }
@@ -192,28 +178,25 @@ protected:
   SystemState &system_state;
 
   QueryBufferMapping buffer_mapping;
-  const ComponentStore &store;
+  World &world;
 
   u_int64_t last_updated = 0;
   std::unordered_map<u_int32_t, std::tuple<create_component_reference_t<Components>...>> entities;
   u_int64_t last_filtered = 0;
   std::vector<std::tuple<create_component_reference_t<Components>...>> filtered;
 
-  QueryBase(QueryBuffer &buffer, SystemState &system_state, ComponentRegistry &component_registry,
-            const ComponentStore &store)
-      : buffer(buffer), system_state(system_state), store(store) {
+  QueryBase(QueryBuffer &buffer, SystemState &system_state, ComponentRegistry &component_registry, World &world)
+      : buffer(buffer), system_state(system_state), world(world) {
     buffer_mapping = QueryBufferMapping::from<std::remove_const_t<Components>...>(buffer, component_registry);
   }
 
-  u_int32_t create(std::type_identity<u_int32_t>, size_t, u_int32_t entity_id, const std::vector<QueryBufferItem> &) {
-    return entity_id;
-  }
+  u_int32_t create(std::type_identity<u_int32_t>, size_t, u_int32_t entity_id) { return entity_id; }
 
   template <template <class> class T, class Arg>
     requires concepts::ComponentReference<T<Arg>>
-  T<Arg> create(std::type_identity<T<Arg>>, size_t buffer_index, u_int32_t, const std::vector<QueryBufferItem> &b) {
-    return T(static_cast<Arg *>(b.at(buffer_index).component.data),
-             b.at(buffer_mapping.map(buffer_index)).component.state, system_state);
+  T<Arg> create(std::type_identity<T<Arg>>, size_t buffer_index, u_int32_t entity_id) {
+    auto &store = world.get_component_store<Arg>();
+    return T<Arg>(store.get_component_data(entity_id), store.get_component_state(entity_id), system_state);
   }
 
   virtual std::unordered_set<Entity> filter(std::unordered_set<Entity> e) { return e; }
@@ -221,16 +204,16 @@ protected:
   void update() {
     if (this->last_updated <= this->buffer.last_changed) {
       entities.clear();
-      for (auto &p : buffer.items) {
+      for (auto &p : buffer.entities) {
         int idx = 0;
         [&]<std::size_t... Is>(std::index_sequence<Is...>) {
           entities.emplace(
-              p.first, std::move(std::make_tuple(
-                           create(std::type_identity<std::remove_const_t<create_component_reference_t<Components>>>(),
-                                  Is, p.first, p.second)...)));
+              p, std::move(std::make_tuple(create(
+                     std::type_identity<std::remove_const_t<create_component_reference_t<Components>>>(), Is, p)...)));
         }
         (std::make_index_sequence<sizeof...(Components)>{});
       }
+      this->last_updated = this->system_state.invocation_id;
     }
 
     // Changed
@@ -266,9 +249,8 @@ public:
 
 template <class... Components> class Query : public QueryBase<Components...> {
 public:
-  Query(QueryBuffer &buffer, SystemState &system_state, ComponentRegistry &component_registry,
-        const ComponentStore &store)
-      : QueryBase<Components...>(buffer, system_state, component_registry, store) {}
+  Query(QueryBuffer &buffer, SystemState &system_state, ComponentRegistry &component_registry, World &world)
+      : QueryBase<Components...>(buffer, system_state, component_registry, world) {}
 };
 
 template <concepts::Filter Filter, class... Components>
@@ -307,16 +289,18 @@ class Query<Filter, Components...> : public QueryBase<Components...> {
 
   template <concepts::Changed F> std::unordered_set<Entity> apply_filter(const std::unordered_set<Entity> &entities) {
     std::unordered_set<Entity> filtered;
+    const auto &store = this->world.template get_component_store<typename F::component_type>();
     for (const Entity &e : entities)
-      if (this->store.template get_component_state<typename F::component_type>(e)->has_changed(this->system_state))
+      if (store.get_component_state(e).has_changed(this->system_state))
         filtered.insert(e);
     return filtered;
   }
 
   template <concepts::Not F> std::unordered_set<Entity> apply_filter(const std::unordered_set<Entity> &entities) {
     std::unordered_set<Entity> filtered;
+    const auto &store = this->world.template get_component_store<typename F::component_type>();
     for (const Entity &e : entities)
-      if (!this->store.template has_component<typename F::component_type>(e))
+      if (!store.has_component(e))
         filtered.insert(e);
     return filtered;
   }
@@ -332,9 +316,8 @@ class Query<Filter, Components...> : public QueryBase<Components...> {
   std::unordered_set<Entity> filter(std::unordered_set<Entity> e) override { return apply_filter<Filter>(e); }
 
 public:
-  Query(QueryBuffer &buffer, SystemState &system_state, ComponentRegistry &component_registry,
-        const ComponentStore &store)
-      : QueryBase<Components...>(buffer, system_state, component_registry, store) {}
+  Query(QueryBuffer &buffer, SystemState &system_state, ComponentRegistry &component_registry, World &world)
+      : QueryBase<Components...>(buffer, system_state, component_registry, world) {}
 };
 
 } // namespace core
