@@ -7,7 +7,7 @@
 constexpr auto TestPlugin = hs::core::PID("TestPlugin");
 
 struct TestPluginC {
-  static constexpr hs::core::CID ID = {TestPlugin, "TestPluginC"};
+  static constexpr hs::core::CID ID{TestPlugin, "TestPluginC"};
 };
 
 class TestPlugin {};
