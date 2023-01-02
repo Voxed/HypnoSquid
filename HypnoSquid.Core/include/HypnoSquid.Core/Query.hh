@@ -28,24 +28,8 @@ template <> struct create_component_reference<u_int32_t> {
 
 template <class T> using create_component_reference_t = typename create_component_reference<T>::type;
 
-enum QueryBufferLayoutItemType { COMPONENT };
-
-struct QueryBufferLayoutItem {
-  QueryBufferLayoutItemType type;
-  union {
-    u_int32_t component_type;
-  } data;
-
-  template <template <class> class T, class Arg>
-  static QueryBufferLayoutItem from_query_parameter(std::type_identity<T<Arg>>, ComponentRegistry &component_registry) {
-    static_assert(!std::is_const_v<Arg>);
-    return QueryBufferLayoutItem{.type = COMPONENT,
-                                 .data = {.component_type = component_registry.template get_component_id<Arg>()}};
-  }
-};
-
 struct QueryBuffer {
-  std::vector<QueryBufferLayoutItem> layout;
+  std::vector<ComponentID> layout;
   std::unordered_set<Entity> entities;
   u_int64_t last_changed = 0;
 
@@ -55,8 +39,7 @@ struct QueryBuffer {
     (
         [&]() {
           if constexpr (!std::is_same_v<Args, u_int32_t>) {
-            buffer.layout.push_back(QueryBufferLayoutItem::from_query_parameter(
-                std::type_identity<std::remove_const_t<create_component_reference_t<Args>>>(), component_registry));
+            buffer.layout.push_back(component_registry.template get_component_id<std::remove_const_t<Args>>());
           }
         }(),
         ...);
@@ -76,11 +59,8 @@ struct QueryBuffer {
           if constexpr (!std::is_same_v<Args, u_int32_t>) {
             bool found_layout = false;
             for (auto &l : layout) {
-              if (l.type == COMPONENT) {
-                if (component_registry.template get_component_id<std::remove_const_t<Args>>() ==
-                    l.data.component_type) {
-                  found_layout = true;
-                }
+              if (component_registry.template get_component_id<std::remove_const_t<Args>>() == l) {
+                found_layout = true;
               }
             }
             if (!found_layout) {
@@ -92,22 +72,19 @@ struct QueryBuffer {
     if (suitable) {
       // Check if all layout items are found in args
       for (auto &l : layout) {
-        if (l.type == COMPONENT) {
-          bool found_arg = false;
-          (
-              [&]() {
-                if constexpr (!std::is_same_v<Args, u_int32_t>) {
-                  if (component_registry.template get_component_id<std::remove_const_t<Args>>() ==
-                      l.data.component_type) {
-                    found_arg = true;
-                  }
+        bool found_arg = false;
+        (
+            [&]() {
+              if constexpr (!std::is_same_v<Args, u_int32_t>) {
+                if (component_registry.template get_component_id<std::remove_const_t<Args>>() == l) {
+                  found_arg = true;
                 }
-              }(),
-              ...);
-          if (!found_arg) {
-            suitable = false;
-            break;
-          }
+              }
+            }(),
+            ...);
+        if (!found_arg) {
+          suitable = false;
+          break;
         }
       }
     }
@@ -117,8 +94,7 @@ struct QueryBuffer {
   void update(Entity entity, const World &world, u_int32_t invocation_id) {
     bool belongs = true;
     for (auto &l : layout)
-      if (l.type == COMPONENT && (!world.has_component_store(l.data.component_type) ||
-                                  !world.get_component_store(l.data.component_type).has_component(entity))) {
+      if (!world.has_component_store(l) || !world.get_component_store(l).has_component(entity)) {
         belongs = false;
         break;
       }
@@ -148,11 +124,9 @@ struct QueryBufferMapping {
             if constexpr (concepts::ComponentReference<Components>) {
               int layout_idx = 0;
               for (auto &layout_item : buffer.layout) {
-                if (layout_item.type == COMPONENT) {
-                  if (component_registry.template get_component_id<Components>() == layout_item.data.component_type) {
-                    mapping.mapping[Is] = layout_idx;
-                    break;
-                  }
+                if (component_registry.template get_component_id<Components>() == layout_item) {
+                  mapping.mapping[Is] = layout_idx;
+                  break;
                 }
                 layout_idx += 1;
               }
