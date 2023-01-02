@@ -5,10 +5,19 @@
 namespace hs {
 namespace core {
 
+struct PID {
+  const char *plugin_name;
+
+  constexpr explicit PID(const char *plugin_name) : plugin_name(plugin_name) {}
+
+  [[nodiscard]] std::string get_id() const { return plugin_name; }
+};
+
 struct CID {
   const char *plugin_name;
   const char *component_name;
 
+  constexpr CID(PID pid, const char *component_name) : plugin_name(pid.plugin_name), component_name(component_name) {}
   constexpr CID(const char *plugin_name, const char *component_name)
       : plugin_name(plugin_name), component_name(component_name) {}
 

@@ -11,20 +11,20 @@ using namespace ::filters;
 #undef HS_PLUGIN
 #define HS_PLUGIN Main
 
+constexpr PID MainPlugin{"Main"};
+
 struct TestData {
   HS_COMPONENT(TestData)
-
   u_int32_t a;
 };
 
 struct TestData2 {
-  HS_COMPONENT(TestData2)
-
+  constexpr static CID ID{"Main", "TestData2"};
   u_int32_t b;
 };
 
 struct TestData3 {
-  HS_COMPONENT(TestData3)
+  constexpr static CID ID{MainPlugin, "TestData2"};
 };
 
 struct TestData4 {
