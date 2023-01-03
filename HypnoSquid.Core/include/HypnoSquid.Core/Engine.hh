@@ -96,8 +96,8 @@ class Engine {
       [&]<std::size_t... Is>(std::index_sequence<Is...>) {
         (
             [&]() {
-              if (!param.has_value())
-                if constexpr (requires(decltype(get<Is>(extensions)) &ext) { ext.instantiate_parameter(t, state); })
+              if constexpr (requires(decltype(get<Is>(extensions)) &ext) { ext.instantiate_parameter(t, state); })
+                if (!param.has_value())
                   param = &(get<Is>(extensions).instantiate_parameter(t, state));
             }(),
             ...);
@@ -109,8 +109,8 @@ class Engine {
       [&]<std::size_t... Is>(std::index_sequence<Is...>) {
         (
             [&]() {
-              if (!param.has_value())
-                if constexpr (requires(decltype(get<Is>(extensions)) &ext) { ext.instantiate_parameter(t, state); })
+              if constexpr (requires(decltype(get<Is>(extensions)) &ext) { ext.instantiate_parameter(t, state); })
+                if (!param.has_value())
                   param.emplace(get<Is>(extensions).instantiate_parameter(t, state));
             }(),
             ...);
