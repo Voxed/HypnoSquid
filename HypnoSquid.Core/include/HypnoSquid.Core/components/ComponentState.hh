@@ -1,6 +1,6 @@
 #pragma once
 
-#include "SystemState.hh"
+#include "../SystemState.hh"
 #include <cstdlib>
 
 namespace hs {

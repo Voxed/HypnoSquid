@@ -1,7 +1,7 @@
 #pragma once
 
+#include "../SystemState.hh"
 #include "ComponentState.hh"
-#include "SystemState.hh"
 #include <cstdlib>
 #include <type_traits>
 

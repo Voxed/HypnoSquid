@@ -1,13 +1,13 @@
 #pragma once
 
-#include "../Commands.hh"
-#include "../ComponentRegistry.hh"
-#include "../ComponentState.hh"
-#include "../ComponentStore.hh"
-#include "../Entity.hh"
-#include "../Filter.hh"
-#include "../Query.hh"
-#include "../World.hh"
+#include "Commands.hh"
+#include "ComponentRegistry.hh"
+#include "ComponentState.hh"
+#include "ComponentStore.hh"
+#include "Entity.hh"
+#include "Filter.hh"
+#include "Query.hh"
+#include "World.hh"
 
 #include "../InvocationID.hh"
 #include "HypnoSquid.Core/components/ComponentExtension.hh"

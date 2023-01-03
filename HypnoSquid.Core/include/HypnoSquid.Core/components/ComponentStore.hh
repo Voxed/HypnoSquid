@@ -1,9 +1,9 @@
 #pragma once
 
+#include "../common.hh"
 #include "ComponentRegistry.hh"
 #include "ComponentState.hh"
 #include "Entity.hh"
-#include "common.hh"
 #include <unordered_map>
 #include <unordered_set>
 

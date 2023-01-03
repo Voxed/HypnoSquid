@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common.hh"
+#include "../common.hh"
 #include <iostream>
 
 namespace hs {

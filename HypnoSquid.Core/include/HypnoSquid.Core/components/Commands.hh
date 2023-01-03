@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ComponentRegistry.hh"
+#include "HypnoSquid.Core/components/ComponentRegistry.hh"
 #include <cstdlib>
 #include <type_traits>
 #include <typeindex>

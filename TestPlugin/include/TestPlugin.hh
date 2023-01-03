@@ -1,6 +1,6 @@
 #pragma once
 
-#include "HypnoSquid.Core/ComponentID.hh"
+#include "HypnoSquid.Core/components/ComponentID.hh"
 
 #include <string>
 
