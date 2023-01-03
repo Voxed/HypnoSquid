@@ -14,9 +14,6 @@ template <class T> constexpr unique_void_ptr make_unique_void(T *ptr) {
 }
 
 namespace concepts {
-template <class T>
-concept TypeDecorator = requires { typename T::value_type; };
-
 template <class T, class... Ts>
 concept is_in = std::disjunction_v<std::is_same<T, Ts>...>;
 
