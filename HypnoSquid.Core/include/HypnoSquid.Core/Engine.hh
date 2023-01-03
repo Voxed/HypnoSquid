@@ -32,9 +32,10 @@ struct EngineCreateInfo {
 
 class Engine {
   /*
-   * The system type.
+   * Type definitions.
    */
-  using System = std::pair<std::unique_ptr<SystemState>, std::function<void()>>;
+  using SystemFunction = std::function<void()>;
+  using System = std::pair<std::unique_ptr<SystemState>, SystemFunction>;
 
   /*
    * Engine extensions, these are used to decouple the engine from specific parameter instantiations.
@@ -135,11 +136,11 @@ class Engine {
    * @return A bound system function which can be invoked, now without any arguments.
    */
   template <class... Parameters>
-  std::function<void()> bind_system(std::function<void(Parameters...)> system, SystemState &system_state) {
+  SystemFunction bind_system(std::function<void(Parameters...)> system, SystemState &system_state) {
     SystemRequirements requirements;
     auto parameters = std::tuple<parameter_type_t<Parameters>...>(
         instantiate_parameter(std::type_identity<parameter_type_t<Parameters>>(), system_state)...);
-    std::function<void()> func = [&, system, parameters]() {
+    SystemFunction func = [&, system, parameters]() {
       [&]<std::size_t... Is>(std::index_sequence<Is...>) { system(get<Is>(parameters)...); }
       (std::make_index_sequence<sizeof...(Parameters)>{});
     };
