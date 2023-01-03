@@ -1,14 +1,6 @@
 #pragma once
 
-#include "Commands.hh"
-#include "ComponentRegistry.hh"
-#include "ComponentState.hh"
-#include "ComponentStore.hh"
-#include "Entity.hh"
-#include "Filter.hh"
 #include "InvocationID.hh"
-#include "Query.hh"
-#include "World.hh"
 #include "components/ComponentExtension.hh"
 
 #include <condition_variable>
