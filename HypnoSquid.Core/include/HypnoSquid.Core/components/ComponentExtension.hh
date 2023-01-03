@@ -139,10 +139,10 @@ public:
     }
   }
 
-  bool can_queue(SystemID system_id) {
-    if (!requirements.contains(system_id))
+  bool can_queue(SystemState &system_state) {
+    if (!requirements.contains(system_state.system_id))
       return true;
-    auto &req = requirements[system_id];
+    auto &req = requirements[system_state.system_id];
     return std::ranges::all_of(req.mutable_components.begin(), req.mutable_components.end(),
                                [&](auto &c) {
                                  return !mutable_component_references.contains(c) &&
@@ -152,15 +152,15 @@ public:
                                [&](auto &c) { return !mutable_component_references.contains(c); });
   }
 
-  void queue(SystemID system_id) {
-    auto &req = requirements[system_id];
+  void queue(SystemState &system_state) {
+    auto &req = requirements[system_state.system_id];
     mutable_component_references.insert(req.mutable_components.begin(), req.mutable_components.end());
     for (auto &m : req.const_components)
       const_component_reference_count[m]++;
   }
 
-  void finished(SystemID system_id) {
-    auto &req = requirements[system_id];
+  void finished(SystemState &system_state) {
+    auto &req = requirements[system_state.system_id];
     for (auto &m : req.mutable_components)
       mutable_component_references.erase(m);
     for (auto &m : req.const_components)
