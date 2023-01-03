@@ -201,22 +201,19 @@ class Engine {
 
   template <class T> struct parameter_type : std::type_identity<T> {};
   template <class Q>
-    requires(concepts::specialization_of<Query, std::remove_const_t<std::remove_reference_t<Q>>>)
+    requires(std::is_const_v<std::remove_reference_t<Q>> && std::is_reference_v<Q>)
   struct parameter_type<Q> : std::type_identity<std::remove_const_t<std::remove_reference_t<Q>>> {};
   template <class T> using parameter_type_t = typename parameter_type<T>::type;
 
-  template <class P>
-  P instantiate_parameter(std::type_identity<P> t, SystemState &state) {
-    if constexpr(std::is_reference_v<P>) {
-      std::optional<std::remove_reference_t<P>*> param = {};
+  template <class P> P instantiate_parameter(std::type_identity<P> t, SystemState &state) {
+    if constexpr (std::is_reference_v<P>) {
+      std::optional<std::remove_reference_t<P> *> param = {};
       [&]<std::size_t... Is>(std::index_sequence<Is...>) {
         (
             [&]() {
               if (!param.has_value()) {
                 std::cout << "HERE" << typeid(decltype(get<Is>(extensions))).name() << std::endl;
-                if constexpr (requires(decltype(get<Is>(extensions)) &ext) {
-                                ext.instantiate_parameter(t, state);
-                              }) {
+                if constexpr (requires(decltype(get<Is>(extensions)) &ext) { ext.instantiate_parameter(t, state); }) {
                   param = &(get<Is>(extensions).instantiate_parameter(t, state));
                   std::cout << typeid(P).name() << "DEFINED" << std::endl;
                 }
@@ -226,15 +223,13 @@ class Engine {
       }
       (std::make_index_sequence<std::tuple_size_v<decltype(extensions)>>{});
       return *(param.value());
-    }else {
+    } else {
       std::optional<P> param = {};
       [&]<std::size_t... Is>(std::index_sequence<Is...>) {
         (
             [&]() {
               if (!param.has_value()) {
-                if constexpr (requires(decltype(get<Is>(extensions)) &ext) {
-                                ext.instantiate_parameter(t, state);
-                              }) {
+                if constexpr (requires(decltype(get<Is>(extensions)) &ext) { ext.instantiate_parameter(t, state); }) {
                   param.emplace(get<Is>(extensions).instantiate_parameter(t, state));
                 }
               }
