@@ -1,3 +1,8 @@
+/**
+ * @file Engine.hh
+ * The file defining the main engine class.
+ */
+
 #pragma once
 
 #include "InvocationID.hh"
