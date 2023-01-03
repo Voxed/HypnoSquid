@@ -27,6 +27,9 @@ struct EngineCreateInfo {
   std::vector<std::string> plugins;
 };
 
+/**
+ * The hypnosquid engine.
+ */
 class Engine {
   /*
    * Type definitions.
