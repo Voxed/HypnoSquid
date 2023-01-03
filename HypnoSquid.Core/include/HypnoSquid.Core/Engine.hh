@@ -99,11 +99,9 @@ class Engine {
       [&]<std::size_t... Is>(std::index_sequence<Is...>) {
         (
             [&]() {
-              if (!param.has_value()) {
-                if constexpr (requires(decltype(get<Is>(extensions)) &ext) { ext.instantiate_parameter(t, state); }) {
+              if (!param.has_value())
+                if constexpr (requires(decltype(get<Is>(extensions)) &ext) { ext.instantiate_parameter(t, state); })
                   param = &(get<Is>(extensions).instantiate_parameter(t, state));
-                }
-              }
             }(),
             ...);
       }
@@ -114,11 +112,9 @@ class Engine {
       [&]<std::size_t... Is>(std::index_sequence<Is...>) {
         (
             [&]() {
-              if (!param.has_value()) {
-                if constexpr (requires(decltype(get<Is>(extensions)) &ext) { ext.instantiate_parameter(t, state); }) {
+              if (!param.has_value())
+                if constexpr (requires(decltype(get<Is>(extensions)) &ext) { ext.instantiate_parameter(t, state); })
                   param.emplace(get<Is>(extensions).instantiate_parameter(t, state));
-                }
-              }
             }(),
             ...);
       }
@@ -205,20 +201,15 @@ class Engine {
    */
   void invoke_systems() {
     if (invocation_id == 0) {
-      for (auto &system : startup_systems) {
-        invoke_system_sync(system);
-      }
+      std::for_each(startup_systems.begin(), startup_systems.end(), [&](auto &system) { invoke_system_sync(system); });
     } else {
-      std::vector<std::thread> threads;
-      for (auto &system : systems) {
-        threads.push_back(invoke_system(system));
-      }
+      std::vector<std::thread> threads(systems.size());
+      std::transform(systems.begin(), systems.end(), threads.begin(),
+                     [&](auto &system) { return invoke_system(system); });
       system_resource_cv.notify_all(); // Notify all threads to start the battle!
-      for (auto &t : threads)
-        t.join();
-      for (auto &system : synchronised_systems) {
-        invoke_system_sync(system);
-      }
+      std::for_each(threads.begin(), threads.end(), [&](auto &system) { system.join(); });
+      std::for_each(synchronised_systems.begin(), synchronised_systems.end(),
+                    [&](auto &system) { invoke_system_sync(system); });
     }
   }
 
