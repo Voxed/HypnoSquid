@@ -1,8 +1,3 @@
-/**
- * This file contains a prototype for the engine.
- * Definitely going to need to decompose it and learn some better techniques.
- */
-
 #pragma once
 
 #include "Commands.hh"
@@ -11,11 +6,10 @@
 #include "ComponentStore.hh"
 #include "Entity.hh"
 #include "Filter.hh"
+#include "InvocationID.hh"
 #include "Query.hh"
 #include "World.hh"
-
-#include "HypnoSquid.Core/components/ComponentExtension.hh"
-#include "InvocationID.hh"
+#include "components/ComponentExtension.hh"
 
 #include <condition_variable>
 #include <dlfcn.h>
@@ -25,11 +19,6 @@
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <tuple>
-#include <typeindex>
-#include <typeinfo>
-#include <unordered_map>
-#include <unordered_set>
-#include <utility>
 #include <vector>
 
 namespace hs {
