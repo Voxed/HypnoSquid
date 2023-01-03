@@ -1,4 +1,4 @@
-add_library(HypnoSquid.Core src/Engine.cc include/HypnoSquid.Core/Engine.hh include/HypnoSquid.Core/Query.hh include/HypnoSquid.Core/ComponentReference.hh include/HypnoSquid.Core/ComponentState.hh include/HypnoSquid.Core/common.hh include/HypnoSquid.Core/Filter.hh include/HypnoSquid.Core/Commands.hh)
+add_library(HypnoSquid.Core src/Engine.cc include/HypnoSquid.Core/Engine.hh include/HypnoSquid.Core/Query.hh include/HypnoSquid.Core/ComponentReference.hh include/HypnoSquid.Core/ComponentState.hh include/HypnoSquid.Core/common.hh include/HypnoSquid.Core/Filter.hh include/HypnoSquid.Core/Commands.hh include/HypnoSquid.Core/components/ComponentExtension.hh include/HypnoSquid.Core/InvocationID.hh)
 target_include_directories(HypnoSquid.Core PUBLIC include)
 target_include_directories(HypnoSquid.Core PRIVATE include/HypnoSquid.Core)
 
