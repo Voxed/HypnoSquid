@@ -2,14 +2,14 @@
 #include <iostream>
 #include <thread>
 
-#include "HypnoSquid.Core/Engine.hh"
 #include "TestPlugin/include/TestPlugin.hh"
+#include <HypnoSquid.Core/Engine.hh>
 
 using namespace hs::core;
 using namespace ::filters;
 
 #undef HS_PLUGIN
-#define HS_PLUGIN Main
+#define HS_PLUGIN MainPlugin
 
 constexpr PID MainPlugin{"Main"};
 
@@ -19,7 +19,7 @@ struct TestData {
 };
 
 struct TestData2 {
-  constexpr static CID ID{"Main", "TestData2"};
+  HS_COMPONENT(TestData2)
   u_int32_t b;
 };
 
