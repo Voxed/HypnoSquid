@@ -90,7 +90,7 @@ class Engine {
    * @param state The state of the system which this parameter is being bound to.
    * @return The parameter value to be bound.
    */
-  template <class P> P instantiate_parameter(std::type_identity<P> t, SystemState &state) {
+  template <class P> P instantiate_parameter(std::type_identity<P>, SystemState &state) {
     /*
      * In order to allow for references, they have to be handled a bit differently. In actuality, pointers might be more
      * appropriate. This is just to allow for more intuitive usage.
@@ -100,9 +100,11 @@ class Engine {
       [&]<std::size_t... Is>(std::index_sequence<Is...>) {
         (
             [&]() {
-              if constexpr (requires(decltype(get<Is>(extensions)) &ext) { ext.instantiate_parameter(t, state); })
+              if constexpr (requires(decltype(get<Is>(extensions)) &ext) {
+                              ext.instantiate_parameter(std::type_identity<P>(), state);
+                            })
                 if (!param.has_value())
-                  param = &(get<Is>(extensions).instantiate_parameter(t, state));
+                  param = &(get<Is>(extensions).instantiate_parameter(std::type_identity<P>(), state));
             }(),
             ...);
       }
@@ -113,9 +115,11 @@ class Engine {
       [&]<std::size_t... Is>(std::index_sequence<Is...>) {
         (
             [&]() {
-              if constexpr (requires(decltype(get<Is>(extensions)) &ext) { ext.instantiate_parameter(t, state); })
+              if constexpr (requires(decltype(get<Is>(extensions)) &ext) {
+                              ext.instantiate_parameter(std::type_identity<P>(), state);
+                            })
                 if (!param.has_value())
-                  param.emplace(get<Is>(extensions).instantiate_parameter(t, state));
+                  param.emplace(get<Is>(extensions).instantiate_parameter(std::type_identity<P>(), state));
             }(),
             ...);
       }
