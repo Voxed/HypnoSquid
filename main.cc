@@ -35,7 +35,11 @@ struct Particle {
   u_int32_t y;
 };
 
-void physics(Query<NotChanged<Particle>, Particle> p, Query<Changed<Particle>, Particle> q) {
+struct MovingParticle {
+  constexpr static ComponentName NAME{MainPlugin, "MovingParticle"};
+};
+
+void physics(Query<Particle, const MovingParticle, Entity> p, Query<Not<MovingParticle>, Particle> q, Commands cmds) {
   std::vector<std::pair<u_int32_t, u_int32_t>> colliders;
   for (auto &t : q.iter()) {
     const Particle &par = get<0>(t).get();
@@ -65,6 +69,8 @@ void physics(Query<NotChanged<Particle>, Particle> p, Query<Changed<Particle>, P
     } else if (right) {
       get<0>(p.first().value()).get_mut().y += 1;
       get<0>(p.first().value()).get_mut().x += 1;
+    } else {
+      cmds.remove_component<MovingParticle>(get<2>(p.first().value()));
     }
   }
 }
@@ -77,7 +83,7 @@ void render(Query<const Particle> q) {
   }
   std::cout << std::endl;
   for (int r = 0; r < 10; r++) {
-    for (int co = 0; co < 10; co++) {
+    for (int co = 0; co < 11; co++) {
       bool found = false;
       for (auto &c : colliders) {
         if (c.second == r && c.first == co) {
@@ -94,20 +100,21 @@ void render(Query<const Particle> q) {
   }
 }
 
-void spawner(Query<Changed<Particle>, Particle> p, Commands cmds, EntityFactory &ef) {
+void spawner(Query<const MovingParticle> p, Commands cmds, EntityFactory &ef) {
   if (!p.first()) {
-    std::cout << "Spawn" << std::endl;
-    cmds.add_component<Particle>(ef.create_entity(), {.x = 5, .y = 0});
+    auto e = ef.create_entity();
+    cmds.add_component<Particle>(e, {.x = 5, .y = 0});
+    cmds.add_component<MovingParticle>(e);
   }
 }
 
 // Temporary system to stop engine from flying away.
-void sleep_system(EntityFactory &ef) { std::this_thread::sleep_for(std::chrono::milliseconds(1000)); }
+void sleep_system(EntityFactory &ef) { std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
 
 int main() {
   hs::core::Engine engine;
-  engine.add_synchronised_system(spawner)
-      .add_synchronised_system(physics)
+  engine.add_system(spawner)
+      .add_system(physics)
       .add_synchronised_system(render)
       .add_synchronised_system(sleep_system)
       .run();
