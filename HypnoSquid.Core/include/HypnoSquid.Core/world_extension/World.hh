@@ -1,6 +1,6 @@
 #pragma once
 
-#include "HypnoSquid.Core/components/ComponentStore.hh"
+#include "ComponentStore.hh"
 
 namespace hs {
 namespace core {

@@ -1,7 +1,7 @@
 #pragma once
 
+#include "ComponentReference.hh"
 #include "Filter.hh"
-#include "HypnoSquid.Core/components/ComponentReference.hh"
 #include "World.hh"
 #include <functional>
 #include <optional>

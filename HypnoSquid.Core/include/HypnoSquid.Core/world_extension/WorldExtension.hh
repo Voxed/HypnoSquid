@@ -9,9 +9,9 @@
 #include "Query.hh"
 #include "World.hh"
 
+#include "../Extension.hh"
 #include "../InvocationID.hh"
-#include "HypnoSquid.Core/Extension.hh"
-#include "HypnoSquid.Core/components/ComponentExtension.hh"
+#include "WorldExtension.hh"
 
 #include <condition_variable>
 #include <dlfcn.h>
@@ -36,7 +36,7 @@ struct SystemRequirements {
   std::unordered_set<ComponentID> mutable_components;
 };
 
-class ComponentExtension : Extension {
+class WorldExtension : Extension {
   std::unordered_map<ComponentID, u_int32_t> const_component_reference_count;
   std::unordered_set<ComponentID> mutable_component_references;
   std::vector<std::unique_ptr<QueryBuffer>> query_buffers;
@@ -170,7 +170,7 @@ public:
       const_component_reference_count[m]--;
   }
 
-  ComponentExtension() : world(component_registry) {}
+  WorldExtension() : world(component_registry) {}
 };
 
 } // namespace core

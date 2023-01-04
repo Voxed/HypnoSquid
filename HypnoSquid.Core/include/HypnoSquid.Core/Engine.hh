@@ -6,7 +6,7 @@
 #pragma once
 
 #include "InvocationID.hh"
-#include "components/ComponentExtension.hh"
+#include "world_extension/WorldExtension.hh"
 
 #include <condition_variable>
 #include <dlfcn.h>
@@ -40,7 +40,7 @@ class Engine {
   /*
    * Engine extensions, these are used to decouple the engine from specific parameter instantiations.
    */
-  std::tuple<ComponentExtension> extensions;
+  std::tuple<WorldExtension> extensions;
   std::make_index_sequence<std::tuple_size_v<decltype(extensions)>> extension_indices;
 
   /*

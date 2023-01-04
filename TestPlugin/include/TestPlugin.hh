@@ -1,6 +1,6 @@
 #pragma once
 
-#include "HypnoSquid.Core/components/ComponentID.hh"
+#include "HypnoSquid.Core/world_extension/ComponentID.hh"
 #include <string>
 
 #undef HS_PLUGIN
