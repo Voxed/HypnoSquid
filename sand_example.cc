@@ -78,6 +78,8 @@ void render(Query<const Particle> q) {
   }
 }
 
+// The spawner will actually run parallel to physics, seeing as they both only require constant access to
+// MovingParticle.
 void spawner(Query<const MovingParticle> p, Commands cmds, EntityFactory &ef) {
   if (!p.first()) {
     auto e = ef.create_entity();
@@ -86,14 +88,13 @@ void spawner(Query<const MovingParticle> p, Commands cmds, EntityFactory &ef) {
   }
 }
 
-// Temporary system to stop engine from flying away.
 void sleep_system(EntityFactory &ef) { std::this_thread::sleep_for(std::chrono::milliseconds(50)); }
 
 int main() {
   hs::core::Engine engine;
   engine.add_system(spawner)
       .add_system(physics)
-      .add_synchronised_system(render)
+      .add_synchronised_system(render) // Needs to be synchronised to avoid jittering.
       .add_synchronised_system(sleep_system)
       .run();
 
