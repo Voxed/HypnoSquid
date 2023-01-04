@@ -43,6 +43,12 @@ public:
     return id;
   }
 
+  template <class Component>
+    requires std::is_const_v<Component>
+  ComponentID get_component_id() {
+    return get_component_id<std::remove_const_t<Component>>();
+  }
+
   std::unique_ptr<AbstractComponentStore> create_component_store(ComponentID id) { return store_factories.at(id)(); }
 };
 

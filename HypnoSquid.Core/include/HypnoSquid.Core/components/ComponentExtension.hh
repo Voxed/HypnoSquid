@@ -36,7 +36,7 @@ struct SystemRequirements {
   std::unordered_set<ComponentID> mutable_components;
 };
 
-class ComponentExtension {
+class ComponentExtension : Extension {
   std::unordered_map<ComponentID, u_int32_t> const_component_reference_count;
   std::unordered_set<ComponentID> mutable_component_references;
   std::vector<std::unique_ptr<QueryBuffer>> query_buffers;
@@ -119,7 +119,7 @@ public:
     }
   }
 
-  void invoke(InvocationID id, ExtensionInvocationSchedule schedule_state) {
+  void invoke(InvocationID id, ExtensionInvocationSchedule schedule_state) override {
     for (auto &command_buffer : command_queue) {
       for (auto &command : command_buffer->commands) {
         switch (command.type) {
@@ -142,7 +142,7 @@ public:
     }
   }
 
-  bool can_system_start(SystemState &system_state) {
+  bool can_system_start(SystemState &system_state) override {
     if (!requirements.contains(system_state.system_id))
       return true;
     auto &req = requirements[system_state.system_id];
@@ -155,14 +155,14 @@ public:
                                [&](auto &c) { return !mutable_component_references.contains(c); });
   }
 
-  void on_system_start(SystemState &system_state) {
+  void on_system_start(SystemState &system_state) override {
     auto &req = requirements[system_state.system_id];
     mutable_component_references.insert(req.mutable_components.begin(), req.mutable_components.end());
     for (auto &m : req.const_components)
       const_component_reference_count[m]++;
   }
 
-  void on_system_end(SystemState &system_state) {
+  void on_system_end(SystemState &system_state) override {
     auto &req = requirements[system_state.system_id];
     for (auto &m : req.mutable_components)
       mutable_component_references.erase(m);

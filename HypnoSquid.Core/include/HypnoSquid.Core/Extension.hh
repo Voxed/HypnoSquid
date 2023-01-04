@@ -13,7 +13,16 @@ namespace core {
  */
 enum ExtensionInvocationSchedule { AFTER_ASYNC_SYSTEM = 0b001, AFTER_SYNC_SYSTEM = 0b010, AFTER_ALL_SYSTEMS = 0b100 };
 
-class Extension {};
+/**
+ * Interface for extensions, not necessarily required as extensions are compile time evaluated.
+ */
+class Extension {
+public:
+  virtual void invoke(InvocationID id, ExtensionInvocationSchedule schedule_state) = 0;
+  virtual bool can_system_start(SystemState &system_state) = 0;
+  virtual void on_system_start(SystemState &system_state) = 0;
+  virtual void on_system_end(SystemState &system_state) = 0;
+};
 
 } // namespace core
 } // namespace hs
