@@ -29,51 +29,113 @@ struct TestData4 {
   constexpr static ComponentName NAME{MainPlugin, "TestData4"};
 };
 
-void sys_a(const Query<const TestData> &q, Commands cmd, EntityFactory &ef) {
-  std::cout << "StartA" << std::endl;
-  std::this_thread::sleep_for(std::chrono::milliseconds(50));
-  std::cout << "EndA" << std::endl;
-  cmd.add_component<TestData>(ef.create_entity());
-}
+struct Particle {
+  constexpr static ComponentName NAME{MainPlugin, "Particle"};
+  u_int32_t x;
+  u_int32_t y;
 
-void sys_b(Query<Changed<TestData>, const TestData, Entity> q, Commands cmd) {
-  std::cout << "StartB" << std::endl;
+  bool inactive = false;
+};
+
+void physics(Query<Particle> q) {
+  std::vector<std::pair<u_int32_t, u_int32_t>> colliders;
   for (auto &t : q.iter()) {
-    if (get<0>(t)->a > 3) {
-      cmd.remove_component<TestData>(get<1>(t));
-    } else {
-      std::cout << get<0>(t)->a << "-" << get<1>(t) << std::endl;
+    const Particle &p = get<0>(t).get();
+    if (p.inactive)
+      colliders.emplace_back(p.x, p.y);
+  }
+
+  for (auto &t : q.iter()) {
+    Particle &p = get<0>(t).get_mut();
+    std::pair<u_int32_t, u_int32_t> next_position = std::make_pair(p.x, p.y + 1);
+    bool left = true, right = true, down = true;
+    if (next_position.second >= 10)
+      left = false, right = false, down = false;
+    else
+      for (const auto &c : colliders) {
+        if (c.first == next_position.first && c.second == next_position.second)
+          down = false;
+        else if (c.first == next_position.first - 1 && c.second == next_position.second)
+          left = false;
+        else if (c.first == next_position.first + 1 && c.second == next_position.second)
+          right = false;
+      }
+    if (!down && !right && !left) {
+      p.inactive = true;
     }
   }
-  std::cout << "EndB" << std::endl;
-}
 
-// This system needs mutable access, so it should always be exclusive from sys_a and sys_b
-void sys_c(Query<TestData> q) {
-  std::cout << "StartC" << std::endl;
-  std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+  colliders.clear();
   for (auto &t : q.iter()) {
-    get<0>(t).get_mut().a += 1;
+    const Particle &p = get<0>(t).get();
+    if (p.inactive)
+      colliders.emplace_back(p.x, p.y);
   }
-  std::cout << "EndC" << std::endl;
+
+  for (auto &t : q.iter()) {
+    Particle &p = get<0>(t).get_mut();
+    std::pair<u_int32_t, u_int32_t> next_position = std::make_pair(p.x, p.y + 1);
+    bool left = true, right = true, down = true;
+    if (next_position.second >= 10)
+      left = false, right = false, down = false;
+    else
+      for (const auto &c : colliders) {
+        if (c.first == next_position.first && c.second == next_position.second)
+          down = false;
+        else if (c.first == next_position.first - 1 && c.second == next_position.second)
+          left = false;
+        else if (c.first == next_position.first + 1 && c.second == next_position.second)
+          right = false;
+      }
+    if (down) {
+      p.y += 1;
+    } else if (left) {
+      p.y += 1;
+      p.x -= 1;
+    } else if (right) {
+      p.y += 1;
+      p.x += 1;
+    } else {
+      p.inactive = true;
+    }
+  }
 }
 
-// This system needs some other component, so it should run asynchronous to sys_c
-void sys_d(const Query<TestData2> &q, const Query<const TestData2> &q2) {
-  std::cout << "StartD" << std::endl;
-  std::this_thread::sleep_for(std::chrono::milliseconds(500));
-  std::cout << "EndD" << std::endl;
+void render(Query<const Particle> q) {
+  std::vector<std::pair<u_int32_t, u_int32_t>> colliders;
+  for (auto &t : q.iter()) {
+    const Particle &p = get<0>(t).get();
+    colliders.emplace_back(p.x, p.y);
+  }
+  std::cout << std::endl;
+  for (int r = 0; r < 10; r++) {
+    for (int co = 0; co < 10; co++) {
+      bool found = false;
+      for (auto &c : colliders) {
+        if (c.second == r && c.first == co) {
+          std::cout << "#";
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        std::cout << ".";
+      }
+    }
+    std::cout << std::endl;
+  }
 }
+
+void spawner(Commands cmds, EntityFactory &ef) { cmds.add_component<Particle>(ef.create_entity(), {.x = 5, .y = 0}); }
 
 // Temporary system to stop engine from flying away.
-void sleep_system(EntityFactory &ef) { std::this_thread::sleep_for(std::chrono::milliseconds(16)); }
+void sleep_system(EntityFactory &ef) { std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
 
 int main() {
   hs::core::Engine engine;
-  engine.add_system(sys_a)
-      .add_system(sys_b)
-      .add_system(sys_c)
-      .add_system(sys_d)
+  engine.add_system(spawner)
+      .add_system(physics)
+      .add_synchronised_system(render)
       .add_synchronised_system(sleep_system)
       .run();
 
