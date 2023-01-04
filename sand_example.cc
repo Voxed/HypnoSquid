@@ -18,53 +18,45 @@ struct MovingParticle {
 };
 
 void physics(Query<Particle, const MovingParticle, Entity> p, Query<Not<MovingParticle>, Particle> q, Commands cmds) {
-  std::vector<std::pair<u_int32_t, u_int32_t>> colliders;
-  for (auto &t : q.iter()) {
-    const Particle &par = get<0>(t).get();
-    colliders.emplace_back(par.x, par.y);
-  }
-
   if (p.first()) {
     const Particle &par = get<0>(p.first().value()).get();
     std::pair<u_int32_t, u_int32_t> next_position = std::make_pair(par.x, par.y + 1);
     bool left = true, right = true, down = true;
-    if (next_position.second >= 10)
-      left = false, right = false, down = false;
-    else
-      for (const auto &c : colliders) {
-        if (c.first == next_position.first && c.second == next_position.second)
+    if (next_position.second >= 10) {
+      cmds.remove_component<MovingParticle>(get<2>(p.first().value()));
+    } else {
+      for (const auto &qp : q.iter()) {
+        auto &c = get<0>(qp).get();
+        if (c.x == next_position.first && c.y == next_position.second)
           down = false;
-        else if (c.first == next_position.first - 1 && c.second == next_position.second)
+        else if (c.x == next_position.first - 1 && c.y == next_position.second)
           left = false;
-        else if (c.first == next_position.first + 1 && c.second == next_position.second)
+        else if (c.x == next_position.first + 1 && c.y == next_position.second)
           right = false;
       }
-    if (down) {
-      get<0>(p.first().value()).get_mut().y += 1;
-    } else if (left) {
-      get<0>(p.first().value()).get_mut().y += 1;
-      get<0>(p.first().value()).get_mut().x -= 1;
-    } else if (right) {
-      get<0>(p.first().value()).get_mut().y += 1;
-      get<0>(p.first().value()).get_mut().x += 1;
-    } else {
-      cmds.remove_component<MovingParticle>(get<2>(p.first().value()));
+      if (down) {
+        get<0>(p.first().value()).get_mut().y += 1;
+      } else if (left) {
+        get<0>(p.first().value()).get_mut().y += 1;
+        get<0>(p.first().value()).get_mut().x -= 1;
+      } else if (right) {
+        get<0>(p.first().value()).get_mut().y += 1;
+        get<0>(p.first().value()).get_mut().x += 1;
+      } else {
+        cmds.remove_component<MovingParticle>(get<2>(p.first().value()));
+      }
     }
   }
 }
 
 void render(Query<const Particle> q) {
-  std::vector<std::pair<u_int32_t, u_int32_t>> colliders;
-  for (auto &t : q.iter()) {
-    const Particle &p = get<0>(t).get();
-    colliders.emplace_back(p.x, p.y);
-  }
   std::cout << std::endl;
   for (int r = 0; r < 10; r++) {
     for (int co = 0; co < 41; co++) {
       bool found = false;
-      for (auto &c : colliders) {
-        if (c.second == r && c.first == co) {
+      for (auto &qp : q.iter()) {
+        auto &c = get<0>(qp).get();
+        if (c.y == r && c.x == co) {
           std::cout << "#";
           found = true;
           break;
