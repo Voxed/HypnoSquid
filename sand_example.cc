@@ -1,8 +1,5 @@
-#include <functional>
 #include <iostream>
-#include <thread>
 
-#include "TestPlugin/include/TestPlugin.hh"
 #include <HypnoSquid.Core/Engine.hh>
 
 using namespace hs::core;

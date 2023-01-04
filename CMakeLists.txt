@@ -10,4 +10,8 @@ add_executable(Test main.cc)
 target_link_libraries(Test HypnoSquid.Core)
 add_dependencies(Test TestPlugin)
 
+add_executable(SandExample sand_example.cc)
+target_link_libraries(SandExample HypnoSquid.Core)
+add_dependencies(SandExample TestPlugin)
+
 configure_file(hypnosquid.json hypnosquid.json COPYONLY)
