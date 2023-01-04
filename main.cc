@@ -11,21 +11,22 @@ using namespace ::filters;
 constexpr PluginName MainPlugin{"Main"};
 
 struct TestData {
-  constexpr static ComponentName ID{MainPlugin, "TestData"};
+  constexpr static ComponentName NAME{MainPlugin, "TestData"};
   u_int32_t a;
 };
+static_assert(concepts::Component<TestData>); // If you want to ensure the component is correctly defined.
 
 struct TestData2 {
-  constexpr static ComponentName ID{MainPlugin, "TestData2"};
+  constexpr static ComponentName NAME{MainPlugin, "TestData2"};
   u_int32_t b;
 };
 
 struct TestData3 {
-  constexpr static ComponentName ID{MainPlugin, "TestData3"};
+  constexpr static ComponentName NAME{MainPlugin, "TestData3"};
 };
 
 struct TestData4 {
-  constexpr static ComponentName ID{MainPlugin, "TestData4"};
+  constexpr static ComponentName NAME{MainPlugin, "TestData4"};
 };
 
 void sys_a(const Query<const TestData> &q, Commands cmd, EntityFactory &ef) {

@@ -25,7 +25,7 @@ public:
   template <class Component> ComponentID get_component_id() {
     static ComponentID id = 0;
     if (id == 0) {
-      std::string cid = Component::ID.get_id();
+      std::string cid = Component::NAME.get_id();
       if (component_ids.contains(cid)) {
         id = component_ids[cid];
         std::cout << "Component with cid " << cid << " aka. " << typeid(Component).name() << " with hash "

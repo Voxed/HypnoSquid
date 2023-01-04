@@ -16,5 +16,14 @@ struct ComponentName {
   [[nodiscard]] std::string get_id() const { return std::string(plugin_name) + "-" + component_name; }
 };
 
+namespace concepts {
+
+template <class T>
+concept Component = requires {
+                      { T::NAME } -> std::convertible_to<ComponentName>;
+                    };
+
+}
+
 } // namespace core
 } // namespace hs
