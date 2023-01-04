@@ -143,6 +143,19 @@ class Engine {
     return func;
   }
 
+  template <enum ExtensionInvocationSchedule schedule_state> constexpr void invoke_extensions() {
+    [&]<std::size_t... Is>(std::index_sequence<Is...>) {
+      (
+          [&]() {
+            if constexpr ((schedule_state & std::tuple_element<Is, decltype(extensions)>::type::INVOCATION_SCHEDULE) ==
+                          schedule_state)
+              get<Is>(extensions).invoke(invocation_id++, schedule_state);
+          }(),
+          ...);
+    }
+    (std::make_index_sequence<std::tuple_size_v<decltype(extensions)>>{});
+  }
+
   /**
    * Invoke a system asynchronously.
    *

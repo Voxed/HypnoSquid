@@ -10,6 +10,7 @@
 #include "World.hh"
 
 #include "../InvocationID.hh"
+#include "HypnoSquid.Core/Extension.hh"
 #include "HypnoSquid.Core/components/ComponentExtension.hh"
 
 #include <condition_variable>
@@ -46,6 +47,8 @@ class ComponentExtension {
   World world;
 
 public:
+  constexpr static ExtensionInvocationSchedule INVOCATION_SCHEDULE = AFTER_ALL_SYSTEMS;
+
   EntityFactory &instantiate_parameter(std::type_identity<EntityFactory &>, SystemState &state) {
     return entity_factory;
   }
@@ -116,7 +119,7 @@ public:
     }
   }
 
-  void invoke_extension(InvocationID id) {
+  void invoke(InvocationID id, ExtensionInvocationSchedule schedule_state) {
     for (auto &command_buffer : command_queue) {
       for (auto &command : command_buffer->commands) {
         switch (command.type) {

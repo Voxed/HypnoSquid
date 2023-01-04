@@ -24,6 +24,7 @@ std::thread Engine::invoke_system(const System &system) {
     system.second();
     system.first->last_invocation_id = inv;
     lk.lock();
+    invoke_extensions<AFTER_ASYNC_SYSTEM>();
 
     [&]<std::size_t... Is>(std::index_sequence<Is...>) { (get<Is>(extensions).on_system_end(*system.first), ...); }
     (extension_indices);
@@ -38,6 +39,8 @@ void Engine::invoke_system_sync(const System &system) {
   system.first->invocation_id = invocation_id;
   system.second();
   system.first->last_invocation_id = invocation_id;
+
+  invoke_extensions<AFTER_SYNC_SYSTEM>();
 }
 
 void Engine::invoke_systems() {
@@ -98,8 +101,7 @@ Engine::Engine(const EngineCreateInfo &createInfo) {
 void Engine::run() {
   while (running) {
     invoke_systems();
-    [&]<std::size_t... Is>(std::index_sequence<Is...>) { (get<Is>(extensions).invoke_extension(invocation_id++), ...); }
-    (std::make_index_sequence<std::tuple_size_v<decltype(extensions)>>{});
+    invoke_extensions<AFTER_ALL_SYSTEMS>();
   }
 }
 
