@@ -134,7 +134,6 @@ class Engine {
    */
   template <class... Parameters>
   SystemFunction bind_system(std::function<void(Parameters...)> system, SystemState &system_state) {
-    SystemRequirements requirements;
     auto parameters = std::tuple<parameter_type_t<Parameters>...>(
         instantiate_parameter(std::type_identity<parameter_type_t<Parameters>>(), system_state)...);
     SystemFunction func = [&, system, parameters]() {
@@ -189,11 +188,8 @@ class Engine {
    */
   template <class... Parameters> System create_system(std::function<void(Parameters...)> system) {
     std::unique_ptr<SystemState> state = create_system_state();
-    return System(std::move(state),
-                  bind_system(std::function<void(Parameters...)>([&, system](Parameters... params) -> void {
-                                system(std::forward<Parameters>(params)...);
-                              }),
-                              *state));
+    SystemFunction func = bind_system(system, *state);
+    return {std::move(state), func};
   }
 
 public:
