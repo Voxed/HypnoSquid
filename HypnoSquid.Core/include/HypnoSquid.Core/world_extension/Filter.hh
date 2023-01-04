@@ -14,6 +14,11 @@ template <class Component> struct Changed : Filter {
   using component_type = Component;
 };
 
+// TODO some more dynamic not filter
+template <class Component> struct NotChanged : Filter {
+  using component_type = Component;
+};
+
 template <class Component> struct Not : Filter {
   using component_type = Component;
 };
@@ -32,6 +37,9 @@ concept Filter = std::is_base_of_v<Filter, T>;
 
 template <class T>
 concept Changed = specialization_of<filters::Changed, T>;
+
+template <class T>
+concept NotChanged = specialization_of<filters::NotChanged, T>;
 
 template <class T>
 concept Not = specialization_of<filters::Not, T>;

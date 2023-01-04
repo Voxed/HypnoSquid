@@ -265,8 +265,20 @@ class Query<Filter, Components...> : public QueryBase<Components...> {
     std::unordered_set<Entity> filtered;
     const auto &store = this->world.template get_component_store<typename F::component_type>();
     for (const Entity &e : entities)
-      if (store.get_component_state(e).has_changed(this->system_state))
-        filtered.insert(e);
+      if (store.has_component(e)) // TODO probably should check somewhere else
+        if (store.get_component_state(e).has_changed(this->system_state))
+          filtered.insert(e);
+    return filtered;
+  }
+
+  template <concepts::NotChanged F>
+  std::unordered_set<Entity> apply_filter(const std::unordered_set<Entity> &entities) {
+    std::unordered_set<Entity> filtered;
+    const auto &store = this->world.template get_component_store<typename F::component_type>();
+    for (const Entity &e : entities)
+      if (store.has_component(e)) // TODO probably should check somewhere else
+        if (!store.get_component_state(e).has_changed(this->system_state))
+          filtered.insert(e);
     return filtered;
   }
 

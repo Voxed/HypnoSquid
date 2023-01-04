@@ -33,48 +33,18 @@ struct Particle {
   constexpr static ComponentName NAME{MainPlugin, "Particle"};
   u_int32_t x;
   u_int32_t y;
-
-  bool inactive = false;
 };
 
-void physics(Query<Particle> q) {
+void physics(Query<NotChanged<Particle>, Particle> p, Query<Changed<Particle>, Particle> q) {
   std::vector<std::pair<u_int32_t, u_int32_t>> colliders;
   for (auto &t : q.iter()) {
-    const Particle &p = get<0>(t).get();
-    if (p.inactive)
-      colliders.emplace_back(p.x, p.y);
+    const Particle &par = get<0>(t).get();
+    colliders.emplace_back(par.x, par.y);
   }
 
-  for (auto &t : q.iter()) {
-    Particle &p = get<0>(t).get_mut();
-    std::pair<u_int32_t, u_int32_t> next_position = std::make_pair(p.x, p.y + 1);
-    bool left = true, right = true, down = true;
-    if (next_position.second >= 10)
-      left = false, right = false, down = false;
-    else
-      for (const auto &c : colliders) {
-        if (c.first == next_position.first && c.second == next_position.second)
-          down = false;
-        else if (c.first == next_position.first - 1 && c.second == next_position.second)
-          left = false;
-        else if (c.first == next_position.first + 1 && c.second == next_position.second)
-          right = false;
-      }
-    if (!down && !right && !left) {
-      p.inactive = true;
-    }
-  }
-
-  colliders.clear();
-  for (auto &t : q.iter()) {
-    const Particle &p = get<0>(t).get();
-    if (p.inactive)
-      colliders.emplace_back(p.x, p.y);
-  }
-
-  for (auto &t : q.iter()) {
-    Particle &p = get<0>(t).get_mut();
-    std::pair<u_int32_t, u_int32_t> next_position = std::make_pair(p.x, p.y + 1);
+  if (p.first()) {
+    const Particle &par = get<0>(p.first().value()).get();
+    std::pair<u_int32_t, u_int32_t> next_position = std::make_pair(par.x, par.y + 1);
     bool left = true, right = true, down = true;
     if (next_position.second >= 10)
       left = false, right = false, down = false;
@@ -88,15 +58,13 @@ void physics(Query<Particle> q) {
           right = false;
       }
     if (down) {
-      p.y += 1;
+      get<0>(p.first().value()).get_mut().y += 1;
     } else if (left) {
-      p.y += 1;
-      p.x -= 1;
+      get<0>(p.first().value()).get_mut().y += 1;
+      get<0>(p.first().value()).get_mut().x -= 1;
     } else if (right) {
-      p.y += 1;
-      p.x += 1;
-    } else {
-      p.inactive = true;
+      get<0>(p.first().value()).get_mut().y += 1;
+      get<0>(p.first().value()).get_mut().x += 1;
     }
   }
 }
@@ -126,15 +94,20 @@ void render(Query<const Particle> q) {
   }
 }
 
-void spawner(Commands cmds, EntityFactory &ef) { cmds.add_component<Particle>(ef.create_entity(), {.x = 5, .y = 0}); }
+void spawner(Query<Changed<Particle>, Particle> p, Commands cmds, EntityFactory &ef) {
+  if (!p.first()) {
+    std::cout << "Spawn" << std::endl;
+    cmds.add_component<Particle>(ef.create_entity(), {.x = 5, .y = 0});
+  }
+}
 
 // Temporary system to stop engine from flying away.
-void sleep_system(EntityFactory &ef) { std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
+void sleep_system(EntityFactory &ef) { std::this_thread::sleep_for(std::chrono::milliseconds(1000)); }
 
 int main() {
   hs::core::Engine engine;
-  engine.add_system(spawner)
-      .add_system(physics)
+  engine.add_synchronised_system(spawner)
+      .add_synchronised_system(physics)
       .add_synchronised_system(render)
       .add_synchronised_system(sleep_system)
       .run();
