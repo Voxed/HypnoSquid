@@ -11,7 +11,7 @@ using namespace ::filters;
 #undef HS_PLUGIN
 #define HS_PLUGIN MainPlugin
 
-constexpr PID MainPlugin{"Main"};
+constexpr PluginName MainPlugin{"Main"};
 
 struct TestData {
   HS_COMPONENT(TestData)
@@ -24,7 +24,7 @@ struct TestData2 {
 };
 
 struct TestData3 {
-  constexpr static CID ID{MainPlugin, "TestData2"};
+  constexpr static ComponentName ID{MainPlugin, "TestData2"};
 };
 
 struct TestData4 {

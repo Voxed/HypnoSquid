@@ -12,7 +12,7 @@ namespace core {
 using ComponentID = u_int32_t;
 
 /*
- * Attaches a unique id to every component based on their CID.
+ * Attaches a unique id to every component based on their ComponentName.
  * O(1) speed complexity if I'm correct.
  */
 class ComponentRegistry {
