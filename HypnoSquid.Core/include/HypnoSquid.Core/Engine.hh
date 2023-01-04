@@ -28,7 +28,7 @@ struct EngineCreateInfo {
 };
 
 /**
- * The hypnosquid engine.
+ * The HypnoSquid engine.
  */
 class Engine {
   /*
@@ -41,6 +41,7 @@ class Engine {
    * Engine extensions, these are used to decouple the engine from specific parameter instantiations.
    */
   std::tuple<ComponentExtension> extensions;
+  std::make_index_sequence<std::tuple_size_v<decltype(extensions)>> extension_indices;
 
   /*
    * The different types of systems.
@@ -105,7 +106,7 @@ class Engine {
             }(),
             ...);
       }
-      (std::make_index_sequence<std::tuple_size_v<decltype(extensions)>>{});
+      (extension_indices);
       return *(param.value());
     } else {
       std::optional<P> param = {};
@@ -118,7 +119,7 @@ class Engine {
             }(),
             ...);
       }
-      (std::make_index_sequence<std::tuple_size_v<decltype(extensions)>>{});
+      (extension_indices);
       return param.value();
     }
   }

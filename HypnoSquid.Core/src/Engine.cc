@@ -11,12 +11,12 @@ std::thread Engine::invoke_system(const System &system) {
       [&]<std::size_t... Is>(std::index_sequence<Is...>) {
         result = (get<Is>(extensions).can_queue(*system.first) && ...);
       }
-      (std::make_index_sequence<std::tuple_size_v<decltype(extensions)>>{});
+      (extension_indices);
       return result;
     });
 
     [&]<std::size_t... Is>(std::index_sequence<Is...>) { (get<Is>(extensions).queue(*system.first), ...); }
-    (std::make_index_sequence<std::tuple_size_v<decltype(extensions)>>{});
+    (extension_indices);
 
     InvocationID inv = ++invocation_id;
     lk.unlock();
@@ -26,7 +26,7 @@ std::thread Engine::invoke_system(const System &system) {
     lk.lock();
 
     [&]<std::size_t... Is>(std::index_sequence<Is...>) { (get<Is>(extensions).finished(*system.first), ...); }
-    (std::make_index_sequence<std::tuple_size_v<decltype(extensions)>>{});
+    (extension_indices);
 
     lk.unlock();
     system_resource_cv.notify_all();
