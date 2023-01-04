@@ -9,7 +9,7 @@
 constexpr hs::core::PluginName TestPlugin{"Test"};
 
 struct TestPluginC {
-  HS_COMPONENT(TestPluginC)
+  constexpr static hs::core::ComponentName ID{TestPlugin, "TestPluginC"};
 };
 
 class TestPlugin {};

@@ -16,7 +16,5 @@ struct ComponentName {
   [[nodiscard]] std::string get_id() const { return std::string(plugin_name) + "-" + component_name; }
 };
 
-#define HS_COMPONENT(name) static constexpr hs::core::ComponentName ID{HS_PLUGIN, #name};
-
 } // namespace core
 } // namespace hs

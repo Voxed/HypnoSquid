@@ -8,27 +8,24 @@
 using namespace hs::core;
 using namespace ::filters;
 
-#undef HS_PLUGIN
-#define HS_PLUGIN MainPlugin
-
 constexpr PluginName MainPlugin{"Main"};
 
 struct TestData {
-  HS_COMPONENT(TestData)
+  constexpr static ComponentName ID{MainPlugin, "TestData"};
   u_int32_t a;
 };
 
 struct TestData2 {
-  HS_COMPONENT(TestData2)
+  constexpr static ComponentName ID{MainPlugin, "TestData2"};
   u_int32_t b;
 };
 
 struct TestData3 {
-  constexpr static ComponentName ID{MainPlugin, "TestData2"};
+  constexpr static ComponentName ID{MainPlugin, "TestData3"};
 };
 
 struct TestData4 {
-  HS_COMPONENT(TestData4)
+  constexpr static ComponentName ID{MainPlugin, "TestData4"};
 };
 
 void sys_a(const Query<const TestData> &q, Commands cmd, EntityFactory &ef) {
