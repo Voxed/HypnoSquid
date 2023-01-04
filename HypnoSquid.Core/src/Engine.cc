@@ -9,13 +9,13 @@ std::thread Engine::invoke_system(const System &system) {
     system_resource_cv.wait(lk, [&] {
       bool result = false;
       [&]<std::size_t... Is>(std::index_sequence<Is...>) {
-        result = (get<Is>(extensions).can_queue(*system.first) && ...);
+        result = (get<Is>(extensions).can_system_start(*system.first) && ...);
       }
       (extension_indices);
       return result;
     });
 
-    [&]<std::size_t... Is>(std::index_sequence<Is...>) { (get<Is>(extensions).queue(*system.first), ...); }
+    [&]<std::size_t... Is>(std::index_sequence<Is...>) { (get<Is>(extensions).on_system_start(*system.first), ...); }
     (extension_indices);
 
     InvocationID inv = ++invocation_id;
@@ -25,7 +25,7 @@ std::thread Engine::invoke_system(const System &system) {
     system.first->last_invocation_id = inv;
     lk.lock();
 
-    [&]<std::size_t... Is>(std::index_sequence<Is...>) { (get<Is>(extensions).finished(*system.first), ...); }
+    [&]<std::size_t... Is>(std::index_sequence<Is...>) { (get<Is>(extensions).on_system_end(*system.first), ...); }
     (extension_indices);
 
     lk.unlock();

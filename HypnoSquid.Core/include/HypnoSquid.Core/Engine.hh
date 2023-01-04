@@ -51,7 +51,7 @@ class Engine {
   std::vector<System> startup_systems;
 
   /*
-   * Mutex and condition value used during system resource reservation.
+   * Sync primitives used during system resource reservation.
    */
   std::mutex system_resource_mutex;
   std::condition_variable system_resource_cv;
