@@ -145,7 +145,7 @@ class Engine {
 
   /**
    * Invoke extensions with the given scheduling state.
-   * @tparam schedule_state The scheduling state of which to invoke extensions.
+   * @tparam schedule_state The scheduling.
    */
   template <enum ExtensionInvocationSchedule schedule_state> constexpr void invoke_extensions() {
     [&]<std::size_t... Is>(std::index_sequence<Is...>) {
