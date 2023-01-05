@@ -51,23 +51,25 @@ void physics(Query<Particle, const MovingParticle, Entity> p, Query<Not<MovingPa
 
 void render(Query<const Particle> q) {
   std::cout << std::endl;
+  std::stringstream ss;
   for (int r = 0; r < 10; r++) {
     for (int co = 0; co < 41; co++) {
       bool found = false;
       for (auto &qp : q.iter()) {
         auto &c = get<0>(qp).get();
         if (c.y == r && c.x == co) {
-          std::cout << "#";
+          ss << "#";
           found = true;
           break;
         }
       }
       if (!found) {
-        std::cout << ".";
+        ss << ".";
       }
     }
-    std::cout << std::endl;
+    ss << std::endl;
   }
+  std::cout << ss.str();
 }
 
 // The spawner will actually run parallel to physics, seeing as they both only require constant access to
@@ -80,11 +82,24 @@ void spawner(Query<const MovingParticle> p, Commands cmds, EntityFactory &ef) {
   }
 }
 
+void startup(Commands cmds, EntityFactory &ef) {
+  for (u_int32_t i = 0; i < 6; i++) {
+    auto e = ef.create_entity();
+    cmds.add_component<Particle>(e, {.x = 18 + i, .y = 3});
+  }
+
+  for (u_int32_t i = 0; i < 6; i++) {
+    auto e = ef.create_entity();
+    cmds.add_component<Particle>(e, {.x = 14 + i, .y = 6});
+  }
+}
+
 void sleep_system(EntityFactory &ef) { std::this_thread::sleep_for(std::chrono::milliseconds(50)); }
 
 int main() {
   hs::core::Engine engine;
-  engine.add_system(spawner)
+  engine.add_startup_system(startup)
+      .add_system(spawner)
       .add_system(physics)
       .add_synchronised_system(render) // Needs to be synchronised to avoid jittering.
       .add_synchronised_system(sleep_system)
